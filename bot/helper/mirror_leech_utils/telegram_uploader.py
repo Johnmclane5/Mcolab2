@@ -267,7 +267,7 @@ class TelegramUploader:
                 # --- Check if file name exists in DB ---
                 if db is not None:
                     no_ext = await remove_extension(file_)
-                    existing = await db["files"].find_one({"file_name": no_ext})
+                    existing = await files_col.find_one({"file_name": no_ext})
                     if existing:
                         LOGGER.info(
                             f"File '{file_}' already exists in DB. Proceeding with imgbb upload."
@@ -398,7 +398,7 @@ class TelegramUploader:
             tmdb_poster_url = None
             is_video, is_audio, is_image = await get_document_type(self._up_path)
 
-            if db and is_video:
+            if db is not None and is_video:
                 if self._listener.user_dict.get("IMGBB_UPLOAD") and self._listener.thumbnail_layout:
                     imgbb_thumb = await get_multiple_frames_thumbnail(
                         self._up_path,
