@@ -1,5 +1,4 @@
 from pyrogram import Client, enums, utils as pyroutils
-from pyrogram.types import LinkPreviewOptions
 from asyncio import Lock
 
 from .. import LOGGER
