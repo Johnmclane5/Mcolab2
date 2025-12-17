@@ -61,8 +61,8 @@ async def remove_unwanted(caption):
 async def get_movie_poster(movie_name, release_year=None):
     tmdb_search_url = f'https://api.themoviedb.org/3/search/movie?api_key={Config.TMDB_API_KEY}&query={movie_name}'
     try:
-        if year:
-            tmdb_search_url += f'&year={year}'
+        if release_year:
+            tmdb_search_url += f'&year={release_year}'
         async with aiohttp.ClientSession() as session:
             async with session.get(tmdb_search_url) as search_response:
                 search_data = await search_response.json()
@@ -80,8 +80,8 @@ async def get_movie_poster(movie_name, release_year=None):
 async def get_tv_poster(tv_name, first_air_year=None):
     tmdb_search_url = f'https://api.themoviedb.org/3/search/tv?api_key={Config.TMDB_API_KEY}&query={tv_name}'
     try:
-        if year:
-            tmdb_search_url += f'&first_air_date_year={year}'
+        if first_air_year:
+            tmdb_search_url += f'&first_air_date_year={first_air_year}'
         async with aiohttp.ClientSession() as session:
             async with session.get(tmdb_search_url) as search_response:
                 search_data = await search_response.json()
