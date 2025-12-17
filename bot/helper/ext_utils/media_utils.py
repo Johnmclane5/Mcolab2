@@ -10,7 +10,7 @@ from asyncio import (
 from asyncio.subprocess import PIPE
 from os import path as ospath
 from re import search as re_search, escape
-from time import time
+from time import gmtime, strftime, time
 from aioshutil import rmtree
 
 from ... import LOGGER, DOWNLOAD_DIR, threads, cores
