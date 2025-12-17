@@ -117,22 +117,16 @@ class TelegramDownloadHelper:
                 download = media.file_unique_id not in GLOBAL_GID
 
             if download:
-                if not self._listener.name:
-                    if hasattr(media, "file_name") and media.file_name:
-                        if "/" in media.file_name:
-                            self._listener.name = media.file_name.rsplit("/", 1)[-1]
-                            path = path + self._listener.name
-                        else:
-                            self._listener.name = media.file_name
-                    else:
-                        self._listener.name = "None"
+                if name == "":
+                    self._listener.name = (
+                        media.file_name if hasattr(media, "file_name") else "None"
+                    )
                 else:
-                    if name:
-                        self._listener.name = name
+                    self._listener.name = name
                     path = path + self._listener.name
                 self._listener.size = media.file_size
                 gid = media.file_unique_id
-
+                
                 msg, button = await stop_duplicate_check(self._listener)
                 if msg:
                     await self._listener.on_download_error(msg, button)
