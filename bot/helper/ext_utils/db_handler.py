@@ -1,7 +1,7 @@
 from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath
 from importlib import import_module
-from pymongo import AsyncMongoClient
+from motor.motor_asyncio import AsyncIOMotorClient as AsyncMongoClient
 from pymongo.server_api import ServerApi
 from pymongo.errors import PyMongoError
 
