@@ -15,7 +15,7 @@ from pyrogram.errors import FloodWait, RPCError, FloodPremiumWait, BadRequest
 from aiofiles.os import (
     remove,
     path as aiopath,
-    rename,
+    rename, mkdir,
 )
 from pyrogram.types import (
     InputMediaVideo,
