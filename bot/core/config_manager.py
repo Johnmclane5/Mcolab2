@@ -13,6 +13,7 @@ class Config:
     BOT_TOKEN = ""
     CMD_SUFFIX = ""
     DATABASE_URL = ""
+    IBB_URL = ""
     DEFAULT_UPLOAD = "rc"
     EQUAL_SPLITS = False
     EXCLUDED_EXTENSIONS = ""
@@ -68,7 +69,9 @@ class Config:
     USE_SERVICE_ACCOUNTS = False
     WEB_PINCODE = False
     YT_DLP_OPTIONS = {}
-
+    TMDB_API_KEY = ""
+    IMGBB_API_KEY = ""
+    
     @classmethod
     def _convert(cls, key: str, value):
         if not hasattr(cls, key):

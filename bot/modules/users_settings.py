@@ -42,6 +42,7 @@ leech_options = [
     "LEECH_DUMP_CHAT",
     "LEECH_FILENAME_PREFIX",
     "THUMBNAIL_LAYOUT",
+    "USER_DUMP",
 ]
 rclone_options = ["RCLONE_CONFIG", "RCLONE_PATH", "RCLONE_FLAGS"]
 gdrive_options = ["TOKEN_PICKLE", "GDRIVE_ID", "INDEX_URL"]
@@ -75,6 +76,17 @@ async def get_user_settings(from_user, stype="main"):
             leech_dest = Config.LEECH_DUMP_CHAT
         else:
             leech_dest = "None"
+
+        buttons.data_button(
+        "User Dump", f"userset {user_id} menu USER_DUMP"
+        )
+        if user_dict.get("USER_DUMP", False):
+            udump = user_dict["USER_DUMP"]
+            adump = user_dict.get("ACTIVE_USER_DUMP")
+        else:
+            udump = "None"
+            adump = "None"
+
         buttons.data_button(
             "Leech Prefix", f"userset {user_id} menu LEECH_FILENAME_PREFIX"
         )
@@ -170,6 +182,17 @@ async def get_user_settings(from_user, stype="main"):
         else:
             thumb_layout = "None"
 
+        if user_dict.get("IMGBB_UPLOAD", False):
+            buttons.data_button(
+                "Disable IMGBB_UPLOAD", f"userset {user_id} tog IMGBB_UPLOAD f"
+            )
+            mf_thumb = "Enabled"
+        else:
+            buttons.data_button(
+                "Enable IMGBB_UPLOAD", f"userset {user_id} tog IMGBB_UPLOAD t"
+            )
+            mf_thumb = "Disabled"
+
         buttons.data_button("Back", f"userset {user_id} back")
         buttons.data_button("Close", f"userset {user_id} close")
 
@@ -184,6 +207,8 @@ Leech Destination is <code>{leech_dest}</code>
 Leech by <b>{leech_method}</b> session
 HYBRID Leech is <b>{hybrid_leech}</b>
 Thumbnail Layout is <b>{thumb_layout}</b>
+User dumps <code>{udump}</code>
+IMGBB_Upload is <b>{mf_thumb}</b>
 """
     elif stype == "rclone":
         buttons.data_button("Rclone Config", f"userset {user_id} menu RCLONE_CONFIG")
@@ -382,10 +407,10 @@ async def add_one(_, message, option):
     if value.startswith("{") and value.endswith("}"):
         try:
             value = eval(value)
-            if user_dict[option]:
-                user_dict[option].update(value)
-            else:
-                update_user_ldata(user_id, option, value)
+            # Ensure user_dict[option] is a dict
+            if option not in user_dict or not isinstance(user_dict[option], dict):
+                user_dict[option] = {}
+            user_dict[option].update(value)
         except Exception as e:
             await send_message(message, str(e))
             return
@@ -402,9 +427,19 @@ async def remove_one(_, message, option):
     handler_dict[user_id] = False
     user_dict = user_data.get(user_id, {})
     names = message.text.split("/")
+    removed_ids = set()
+    # Remove channels
     for name in names:
         if name in user_dict[option]:
+            removed_ids.add(user_dict[option][name])
             del user_dict[option][name]
+    # Remove ACTIVE_USER_DUMP if its ID was removed or no channels left
+    if "ACTIVE_USER_DUMP" in user_dict:
+        if (
+            user_dict["ACTIVE_USER_DUMP"] in removed_ids
+            or user_dict["ACTIVE_USER_DUMP"] not in user_dict[option].values()
+        ):
+            del user_dict["ACTIVE_USER_DUMP"]
     await delete_message(message)
     await database.update_user_data(user_id)
 
@@ -448,6 +483,9 @@ async def set_option(_, message, option):
 
 
 async def get_menu(option, message, user_id):
+    if option == "USER_DUMP":
+        await show_user_dump_menu(message, user_id)
+        return
     handler_dict[user_id] = False
     user_dict = user_data.get(user_id, {})
     buttons = ButtonMaker()
@@ -585,7 +623,6 @@ async def event_handler(client, query, pfunc, photo=False, document=False):
         if time() - start_time > 60:
             handler_dict[user_id] = False
     client.remove_handler(*handler)
-
 
 @new_task
 async def edit_user_settings(client, query):
@@ -727,6 +764,18 @@ async def edit_user_settings(client, query):
     elif data[2] == "back":
         await query.answer()
         await update_user_settings(query)
+    elif data[2] == "USER_DUMP":
+        await query.answer()
+        await show_user_dump_menu(message, user_id)
+    elif data[2] == "selectdump":
+        await query.answer(f"Selected channel ID: {data[3]}", show_alert=True)
+        user_dict["ACTIVE_USER_DUMP"] = int(data[3])
+        await database.update_user_data(user_id)
+        await query.answer(f"Active User Dump set to channel ID: {data[3]}", show_alert=True)
+    elif data[2] == "nonedump":
+        user_dict.pop("ACTIVE_USER_DUMP", None)
+        await database.update_user_data(user_id)
+        await query.answer("Active user dump has been successfully set to None!", show_alert=True)
     else:
         await query.answer()
         await delete_message(message.reply_to_message)
@@ -759,3 +808,19 @@ async def get_users_settings(_, message):
             await send_message(message, msg)
     else:
         await send_message(message, "No users data!")
+
+async def show_user_dump_menu(message, user_id):
+    user_dict = user_data.get(user_id, {})
+    dump_dict = user_dict.get("USER_DUMP", {})
+    buttons = ButtonMaker()
+    # Add "Add one" button always
+    buttons.data_button("Add one", f"userset {user_id} addone USER_DUMP")
+    # Only show channels if dump_dict is a dict and not empty
+    if isinstance(dump_dict, dict) and dump_dict:
+        for name, cid in dump_dict.items():
+            buttons.data_button(name, f"userset {user_id} selectdump {cid}")
+        buttons.data_button("Remove one", f"userset {user_id} rmone USER_DUMP")
+        buttons.data_button("Set to None", f"userset {user_id} nonedump")
+    buttons.data_button("Back", f"userset {user_id} leech")
+    buttons.data_button("Close", f"userset {user_id} close")
+    await edit_message(message, "Select a User Dump channel or add one:", buttons.build_menu(1))

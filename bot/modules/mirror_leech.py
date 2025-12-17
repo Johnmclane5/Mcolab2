@@ -102,6 +102,9 @@ class Mirror(TaskListener):
             "-ns": "",
             "-tl": "",
             "-ff": set(),
+            "-ud": "",
+            "-se": "",
+            "-mv": "",
         }
 
         arg_parser(input_list[1:], args)
@@ -133,6 +136,10 @@ class Mirror(TaskListener):
         self.bot_trans = args["-bt"]
         self.user_trans = args["-ut"]
         self.ffmpeg_cmds = args["-ff"]
+        self.extract_subtitle = args["-se"]
+        self.user_dump = args["-ud"]
+        self.se_only = self.extract_subtitle == "only"
+        self.merge = args["-mv"]
 
         headers = args["-h"]
         if headers:
@@ -328,8 +335,10 @@ class Mirror(TaskListener):
                     return
 
         if file_ is not None:
+            msg_caption = f'{reply_to.caption if reply_to.caption else None}'
+
             await TelegramDownloadHelper(self).add_download(
-                reply_to, f"{path}/", session
+                reply_to, f"{path}/", msg_caption, session
             )
         elif isinstance(self.link, dict):
             await add_direct_download(self, path)

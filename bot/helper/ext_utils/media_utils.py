@@ -1,3 +1,5 @@
+import os
+import random
 from PIL import Image
 from aiofiles.os import remove, path as aiopath, makedirs
 from asyncio import (
@@ -124,10 +126,8 @@ async def take_ss(video_file, ss_nb) -> bool:
         cmds = []
         for i in range(ss_nb):
             output = f"{dirpath}/SS.{name}_{i:02}.png"
+            hms_time = strftime("%H\\:%M\\:%S", gmtime(cap_time))
             cmd = [
-                "taskset",
-                "-c",
-                f"{cores}",
                 "ffmpeg",
                 "-hide_banner",
                 "-loglevel",
@@ -136,12 +136,14 @@ async def take_ss(video_file, ss_nb) -> bool:
                 f"{cap_time}",
                 "-i",
                 video_file,
+                "-vf",
+                f"drawtext=text='{hms_time}':x=10:y=10:fontsize=50:fontcolor=white:box=1:boxcolor=black@0.7",
                 "-q:v",
                 "1",
                 "-frames:v",
                 "1",
                 "-threads",
-                f"{threads}",
+                f"{max(1, cpu_no // 2)}",
                 output,
             ]
             cap_time += interval
@@ -150,13 +152,13 @@ async def take_ss(video_file, ss_nb) -> bool:
             resutls = await wait_for(gather(*cmds), timeout=60)
             if resutls[0][2] != 0:
                 LOGGER.error(
-                    f"Error while creating screenshots from video. Path: {video_file}. stderr: {resutls[0][1]}"
+                    f"Error while creating sreenshots from video. Path: {video_file}. stderr: {resutls[0][1]}"
                 )
                 await rmtree(dirpath, ignore_errors=True)
                 return False
         except:
             LOGGER.error(
-                f"Error while creating screenshots from video. Path: {video_file}. Error: Timeout some issues with ffmpeg with specific arch!"
+                f"Error while creating sreenshots from video. Path: {video_file}. Error: Timeout some issues with ffmpeg with specific arch!"
             )
             await rmtree(dirpath, ignore_errors=True)
             return False
@@ -258,9 +260,6 @@ async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
     await makedirs(output_dir, exist_ok=True)
     output = ospath.join(output_dir, f"{time()}.jpg")
     cmd = [
-        "taskset",
-        "-c",
-        f"{cores}",
         "ffmpeg",
         "-hide_banner",
         "-loglevel",
@@ -270,7 +269,7 @@ async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
         "-i",
         f"{escape(dirpath)}/*.png",
         "-vf",
-        f"tile={layout}, thumbnail",
+        f"tile={layout}, thumbnail, scale=-1:1080",
         "-q:v",
         "1",
         "-frames:v",
@@ -278,7 +277,7 @@ async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
         "-f",
         "mjpeg",
         "-threads",
-        f"{threads}",
+        f"{max(1, cpu_no // 2)}",
         output,
     ]
     try:
@@ -297,7 +296,6 @@ async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
         if not keep_screenshots:
             await rmtree(dirpath, ignore_errors=True)
     return output
-
 
 class FFMpeg:
 
@@ -754,3 +752,163 @@ class FFMpeg:
             start_time += lpd - 3
             i += 1
         return True
+
+    async def merge_videos(self, folder_path, output_path):
+        self.clear()
+
+        self._total_time = 0
+
+        # Collect all video files in the folder
+        mkv_files = []
+        mp4_file = []
+        srt_file = []
+        for root, _, files in os.walk(folder_path):
+            for f in files:
+                if f.endswith(('.mkv')):
+                    mkv_files.append(os.path.join(root, f)) 
+                if f.endswith(('.mp4')):
+                    mp4_file.append(os.path.join(root, f)) 
+                if f.endswith(('.srt')):
+                    srt_file.append(os.path.join(root, f)) 
+
+        # Ensure there are video files to merge
+        if not mkv_files and not mp4_file:
+            LOGGER.error(f"No video files found in the folder: {folder_path}")
+            return False
+        if mkv_files:
+            mkv_files.sort()
+            # Create a temporary text file for ffmpeg to read the list of video files
+            with open(os.path.join(folder_path, 'filelist.txt'), 'w', encoding='utf-8') as filelist:
+                for video in mkv_files:
+                    safe_video = video.replace("'", "'\\''")  # Escape single quotes for FFmpeg
+                    filelist.write(f"file '{safe_video}'\n")
+
+            # Construct the ffmpeg command to concatenate videos
+            cmd = [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel", "error",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", os.path.join(folder_path, 'filelist.txt'),
+                "-c", "copy",
+                '-map', '0:v',
+                '-map', '0:a?',      # Optional audio
+                '-map', '0:s?',      # Optional subtitles
+                output_path
+            ]
+            
+        if mp4_file and srt_file:
+            # Use MKV format for output and original video file name
+            original_video = mp4_file[0]
+            base_name, _ = os.path.splitext(original_video)
+            output_mkv = f"{base_name}.mkv"
+            cmd = [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel", "error",
+                '-i', original_video,
+            ]
+            # Add all subtitle files as inputs
+            for srt in srt_file:
+                cmd.extend(['-i', srt])
+            cmd.extend([
+                '-c:v', 'copy',
+                '-c:a', 'copy',
+                '-c:s', 'copy',
+            ])
+            # Map video and audio
+            cmd.extend(['-map', '0:v', '-map', '0:a'])
+            # Map all subtitle streams
+            for idx in range(1, len(srt_file) + 1):
+                cmd.extend(['-map', str(idx)])
+            cmd.append(output_mkv)
+            LOGGER.info(f"{cmd}")
+            output_path = output_mkv
+            
+        if self._listener.is_cancelled:
+            return False
+        
+        # Execute the ffmpeg command
+        self._listener.subproc = await create_subprocess_exec(
+            *cmd,
+            stdout=PIPE,
+            stderr=PIPE,
+        )
+        
+        await self._ffmpeg_progress()
+        _, stderr = await self._listener.subproc.communicate()
+        code = self._listener.subproc.returncode
+        
+        # Clean up the temporary file list
+        #os.remove(os.path.join(folder_path, 'filelist.txt'))
+        for file in mkv_files:
+            try:
+                os.remove(file)  # Deletes the file
+            except Exception as e:
+                LOGGER.info(f"Error deleting {file}: {e}")
+                
+        if mp4_file:
+            os.remove(mp4_file[0])
+ 
+        if self._listener.is_cancelled:
+            return False
+        if code == 0:
+            return output_path
+        if code == -9:
+            self._listener.is_cancelled = True
+            return False
+        
+        try:
+            stderr = stderr.decode().strip()
+        except Exception:
+            stderr = "Unable to decode the error!"
+        
+        LOGGER.error(f"{stderr}. Something went wrong while merging videos. Folder: {folder_path}")
+        return False
+
+    async def extract_subtitles(self, video_file):
+        self.clear()
+        base_name = ospath.splitext(video_file)[0]
+        output_srt = f"{base_name}.srt"
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-progress",
+            "pipe:1",
+            "-i",
+            video_file,
+            "-map",
+            "0:s:m:language:eng:0?",
+            "-c:s",
+            "srt",
+            "-threads",
+            f"{max(1, cpu_no // 2)}",
+            output_srt,
+        ]
+        if self._listener.is_cancelled:
+            return False
+        self._listener.subproc = await create_subprocess_exec(
+            *cmd, stdout=PIPE, stderr=PIPE
+        )
+        await self._ffmpeg_progress()
+        _, stderr = await self._listener.subproc.communicate()
+        code = self._listener.subproc.returncode
+        if self._listener.is_cancelled:
+            return False
+        if code == 0:
+            return True
+        elif code == -9:
+            self._listener.is_cancelled = True
+            return False
+        else:
+            try:
+                stderr = stderr.decode().strip()
+            except:
+                stderr = "Unable to decode the error!"
+            LOGGER.error(
+                f"{stderr}. Something went wrong while extracting subtitles. Path: {video_file}"
+            )
+        return False

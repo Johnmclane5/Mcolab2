@@ -1,3 +1,8 @@
+import contextlib
+import aiohttp
+import re
+import PTN
+import imgbbpy
 from PIL import Image
 from aioshutil import rmtree
 from asyncio import sleep
@@ -37,9 +42,20 @@ from ..ext_utils.media_utils import (
     get_audio_thumbnail,
     get_multiple_frames_thumbnail,
 )
+from ..ext_utils.extras import remove_extension, remove_redandent, get_movie_poster, get_tv_poster, extract_file_info
+from motor.motor_asyncio import AsyncIOMotorClient 
+from ..ext_utils.bot_utils import sync_to_async, download_image_url
 
 LOGGER = getLogger(__name__)
 
+try:
+    mongo_client = AsyncIOMotorClient(Config.IBB_URL)  # Use AsyncIOMotorClient
+    db = mongo_client['sharing_bot']
+    files_col = db['files']
+except Exception as e:
+    LOGGER.error(f"Failed to connect to MongoDB: {e}")
+    db = None
+    pass
 
 class TelegramUploader:
     def __init__(self, listener, path):
@@ -62,6 +78,20 @@ class TelegramUploader:
         self._sent_msg = None
         self._user_session = self._listener.user_transmission
         self._error = ""
+        self._user_dump = ""
+
+    async def get_custom_thumb(self, thumb):
+        photo_dir = await download_image_url(thumb)
+    
+        if await aiopath.exists(photo_dir):
+            path = "Thumbnails"
+            if not await aiopath.isdir(path):
+                await mkdir(path)
+            des_dir = ospath.join(path, f'{time()}.jpg')
+            await sync_to_async(Image.open(photo_dir).convert("RGB").save, des_dir, "JPEG")
+            await remove(photo_dir)
+            return des_dir
+        return None     
 
     async def _upload_progress(self, current, _):
         if self._listener.is_cancelled:
@@ -84,6 +114,10 @@ class TelegramUploader:
             if "LEECH_FILENAME_PREFIX" not in self._listener.user_dict
             else ""
         )
+        if self._listener.user_dump:
+            self._user_dump = self._listener.user_dict.get("USER_DUMP", {}).get(self._listener.user_dump)
+        else:
+            self._user_dump = self._listener.user_dict.get("ACTIVE_USER_DUMP")
         if self._thumb != "none" and not await aiopath.exists(self._thumb):
             self._thumb = None
 
@@ -229,6 +263,34 @@ class TelegramUploader:
                 if not await aiopath.exists(self._up_path):
                     LOGGER.error(f"{self._up_path} not exists! Continue uploading!")
                     continue
+
+                # --- Check if file name exists in DB ---
+                if db is not None:
+                    no_ext = await remove_extension(file_)
+                    existing = await db["files"].find_one({"file_name": no_ext})
+                    if existing:
+                        LOGGER.info(
+                            f"File '{file_}' already exists in DB. Proceeding with imgbb upload."
+                        )
+                        if 'poster_delete_url' in existing:
+                            poster_url = existing['poster_delete_url']
+                            await self._sent_msg.reply_text(
+                                f"An old ImgBB poster for this file was found. Please delete it manually: {poster_url}",
+                                disable_web_page_preview=True,
+                            )
+                        if self._listener.user_dict.get("IMGBB_UPLOAD") and self._listener.thumbnail_layout:
+                            imgbb_thumb = await get_multiple_frames_thumbnail(
+                                self._up_path,
+                                self._listener.thumbnail_layout,
+                                self._listener.screen_shots,
+                            )
+                        else:
+                            imgbb_thumb = await get_video_thumbnail(self._up_path, None)
+                        await self._upload_to_imgbb(imgbb_thumb, file_, existing)
+                        await self.cancel_task()
+                        return
+                # --- End check ---
+
                 try:
                     f_size = await aiopath.getsize(self._up_path)
                     self._total_files += 1
@@ -332,7 +394,35 @@ class TelegramUploader:
         thumb = self._thumb
         self._is_corrupted = False
         try:
+            imgbb_thumb = None
+            tmdb_poster_url = None
             is_video, is_audio, is_image = await get_document_type(self._up_path)
+
+            if db and is_video:
+                if self._listener.user_dict.get("IMGBB_UPLOAD") and self._listener.thumbnail_layout:
+                    imgbb_thumb = await get_multiple_frames_thumbnail(
+                        self._up_path,
+                        self._listener.thumbnail_layout,
+                        self._listener.screen_shots,
+                    )
+                else:
+                    imgbb_thumb = await get_video_thumbnail(self._up_path, None)
+
+            if Config.TMDB_API_KEY and is_video:
+                title = remove_redandent(ospath.splitext(file)[0])
+                parsed_data = PTN.parse(title)
+                title = parsed_data.get("title", "").replace("_", " ").replace("-", " ").replace(":", " ")
+                title = ' '.join(title.split())
+                aka_pattern = r'\sA[.\s]?K[.\s]?A[.]?\s+'
+                if re.search(aka_pattern, title, re.IGNORECASE):
+                    title = re.split(aka_pattern, title, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+                year = parsed_data.get("year")
+                season = parsed_data.get("season")
+
+                if season:
+                    tmdb_poster_url = await get_tv_poster(title, year)
+                else:
+                    tmdb_poster_url = await get_movie_poster(title, year)
 
             if not is_image and thumb is None:
                 file_name = ospath.splitext(file)[0]
@@ -350,6 +440,10 @@ class TelegramUploader:
                 or (not is_video and not is_audio and not is_image)
             ):
                 key = "documents"
+                if tmdb_poster_url and thumb is None:
+                    thumb =  await self.get_custom_thumb(tmdb_poster_url)
+                    LOGGER.info("Got the poster")
+
                 if is_video and thumb is None:
                     thumb = await get_video_thumbnail(self._up_path, None)
 
@@ -369,6 +463,10 @@ class TelegramUploader:
             elif is_video:
                 key = "videos"
                 duration = (await get_media_info(self._up_path))[0]
+                if tmdb_poster_url and thumb is None:
+                    thumb =  await self.get_custom_thumb(tmdb_poster_url)
+                    LOGGER.info("Got the poster")
+    
                 if thumb is None and self._listener.thumbnail_layout:
                     thumb = await get_multiple_frames_thumbnail(
                         self._up_path,
@@ -429,6 +527,11 @@ class TelegramUploader:
                     progress=self._upload_progress,
                 )
 
+            cpy_msg = await self._copy_message()
+
+            if imgbb_thumb:
+                await self._upload_to_imgbb(imgbb_thumb, file, cpy_msg)
+
             if (
                 not self._listener.is_cancelled
                 and self._media_group
@@ -480,6 +583,74 @@ class TelegramUploader:
                 LOGGER.error(f"Retrying As Document. Path: {self._up_path}")
                 return await self._upload_file(cap_mono, file, o_path, True)
             raise err
+        finally:
+            if imgbb_thumb and await aiopath.exists(imgbb_thumb):
+                await remove(imgbb_thumb)
+
+
+    async def _upload_to_imgbb(self, imgbb_thumb, file, cpy_msg):
+        try:
+            if cpy_msg:
+                f_name = await remove_extension(ospath.splitext(file)[0])
+                imgbb_client = imgbbpy.AsyncClient(Config.IMGBB_API_KEY)
+                if isinstance(cpy_msg, dict):
+                    message_id = cpy_msg.get("message_id")
+                else:
+                    message_id = cpy_msg.id
+                screenshot = await imgbb_client.upload(
+                    file=imgbb_thumb, name=f"{message_id}"
+                )
+                ss_url = screenshot.url
+                ss_del_url = screenshot.delete_url
+                await imgbb_client.close()
+                if isinstance(cpy_msg, dict):
+                    file_info = cpy_msg
+                else:
+                    file_info = await extract_file_info(
+                        cpy_msg, channel_id=cpy_msg.chat.id
+                    )
+                file_info["poster_url"] = ss_url
+                file_info["poster_delete_url"] = ss_del_url
+                await files_col.update_one(
+                    {
+                        "channel_id": file_info["channel_id"],
+                        "message_id": file_info["message_id"],
+                    },
+                    {"$set": file_info},
+                    upsert=True,
+                )
+                LOGGER.info(f"Uploaded screenshot to imgbb: {f_name}")
+        except Exception as e:
+            LOGGER.error(f"Error uploading to imgbb or MongoDB: {e}")
+            await self.cancel_task()
+            await self._sent_msg.reply_text(f"Error uploading to imgbb or MongoDB: {e}")
+
+    async def _copy_message(self):
+        await sleep(1)
+
+        async def _copy(target, retries=3):
+            cpy_msg = None
+            for attempt in range(retries):
+                try:
+                    msg = await TgClient.bot.get_messages(
+                        self._sent_msg.chat.id,
+                        self._sent_msg.id,
+                    )
+                    if msg and (msg.document.mime_type.startswith("video/") 
+                                or msg.document.file_name.lower().endswith(".srt")):
+                        cpy_msg = await msg.copy(target)
+                    return cpy_msg
+                except Exception as e:
+                    LOGGER.error(f"Attempt {attempt + 1} failed: {e} {msg.id}")
+                    if attempt < retries - 1:
+                        await sleep(0.5)
+            LOGGER.error(f"Failed to copy message after {retries} attempts")
+            return cpy_msg
+        
+        if self._user_dump:
+            with contextlib.suppress(Exception):
+                cpy_msg = await _copy(int(self._user_dump))
+                return cpy_msg
 
     @property
     def speed(self):
