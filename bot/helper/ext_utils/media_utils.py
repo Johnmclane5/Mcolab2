@@ -143,7 +143,7 @@ async def take_ss(video_file, ss_nb) -> bool:
                 "-frames:v",
                 "1",
                 "-threads",
-                f"{max(1, cpu_no // 2)}",
+                f"{threads}",
                 output,
             ]
             cap_time += interval
@@ -277,7 +277,7 @@ async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
         "-f",
         "mjpeg",
         "-threads",
-        f"{max(1, cpu_no // 2)}",
+        f"{threads}",
         output,
     ]
     try:
@@ -885,7 +885,7 @@ class FFMpeg:
             "-c:s",
             "srt",
             "-threads",
-            f"{max(1, cpu_no // 2)}",
+            f"{threads}",
             output_srt,
         ]
         if self._listener.is_cancelled:

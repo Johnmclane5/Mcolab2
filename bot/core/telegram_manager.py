@@ -1,10 +1,12 @@
-from pyrogram import Client, enums
+from pyrogram import Client, enums, utils as pyroutils
 from pyrogram.types import LinkPreviewOptions
 from asyncio import Lock
 
 from .. import LOGGER
 from .config_manager import Config
 
+pyroutils.MIN_CHAT_ID = -999999999999
+pyroutils.MIN_CHANNEL_ID = -100999999999999
 
 class TgClient:
     _lock = Lock()
@@ -26,11 +28,6 @@ class TgClient:
             proxy=Config.TG_PROXY,
             bot_token=Config.BOT_TOKEN,
             parse_mode=enums.ParseMode.HTML,
-            max_concurrent_transmissions=10,
-            max_message_cache_size=15000,
-            max_topic_cache_size=15000,
-            sleep_threshold=0,
-            link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
         await cls.bot.start()
         cls.NAME = cls.bot.me.username
@@ -48,10 +45,6 @@ class TgClient:
                     session_string=Config.USER_SESSION_STRING,
                     parse_mode=enums.ParseMode.HTML,
                     sleep_threshold=60,
-                    max_concurrent_transmissions=10,
-                    max_message_cache_size=15000,
-                    max_topic_cache_size=15000,
-                    link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
                 await cls.user.start()
                 cls.IS_PREMIUM_USER = cls.user.me.is_premium
