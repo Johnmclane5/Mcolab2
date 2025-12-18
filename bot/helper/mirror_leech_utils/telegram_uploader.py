@@ -11,7 +11,7 @@ from natsort import natsorted
 from os import walk, path as ospath
 from time import time
 from re import match as re_match, sub as re_sub
-from pyrogram.errors import FloodWait, RPCError, FloodPremiumWait, BadRequest
+from pyrogram.errors import FloodWait, RPCError, BadRequest
 from aiofiles.os import (
     remove,
     path as aiopath,
@@ -561,7 +561,7 @@ class TelegramUploader:
                 and await aiopath.exists(thumb)
             ):
                 await remove(thumb)
-        except (FloodWait, FloodPremiumWait) as f:
+        except (FloodWait) as f:
             LOGGER.warning(str(f))
             await sleep(f.value * 1.3)
             if (
