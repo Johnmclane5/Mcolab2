@@ -18,6 +18,7 @@ from ... import LOGGER, DOWNLOAD_DIR
 from ...core.torrent_manager import TorrentManager
 from .bot_utils import sync_to_async, cmd_exec
 from .exceptions import NotSupportedExtractionArchive
+from subprocess import run as srun
 
 ARCH_EXT = [
     ".tar.bz2",
@@ -147,6 +148,18 @@ async def clean_all():
     await (await create_subprocess_exec("rm", "-rf", DOWNLOAD_DIR)).wait()
     await aiomakedirs(DOWNLOAD_DIR, exist_ok=True)
 
+def exit_clean_up(_, __):
+    try:
+        LOGGER.info("Please wait! Bot clean up and stop the running downloads...")
+        srun(
+            ["pkill", "-9", "-f", "gunicorn|aria|ffmpeg|rclone|7z|split"],
+            check=False,
+        )
+        exit(0)
+    except KeyboardInterrupt:
+        LOGGER.warning("Force Exiting before the cleanup finishes!")
+        exit(1)
+    
 
 async def clean_unwanted(opath):
     LOGGER.info(f"Cleaning unwanted files/folders: {opath}")
