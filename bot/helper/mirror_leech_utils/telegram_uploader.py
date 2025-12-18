@@ -48,14 +48,14 @@ from ..ext_utils.bot_utils import sync_to_async, download_image_url
 
 LOGGER = getLogger(__name__)
 
+db = None
 try:
     if Config.IBB_URL:
         mongo_client = AsyncIOMotorClient(Config.IBB_URL)  # Use AsyncIOMotorClient
         db = mongo_client['sharing_bot']
         files_col = db['files']
 except Exception as e:
-    LOGGER.error(f"Failed to connect to MongoDB: {e}")
-    db = None
+    LOGGER.error(f"Failed to connect to MongoDB: {e}")    
     pass
 
 class TelegramUploader:
