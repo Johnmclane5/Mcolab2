@@ -2,6 +2,7 @@ from aiofiles.os import remove, path as aiopath
 from asyncio import sleep, TimeoutError
 from time import time
 from aiohttp.client_exceptions import ClientError
+from aioaria2.exceptions import Aria2rpcException
 
 from ... import task_dict_lock, task_dict, LOGGER, intervals
 from ...core.config_manager import Config
@@ -20,9 +21,13 @@ from ..telegram_helper.message_utils import (
 
 async def _on_download_started(api, data):
     gid = data["params"][0]["gid"]
-    download = await api.tellStatus(gid)
-    options = await api.getOption(gid)
-    if options.get("follow-torrent", "") == "false":
+    try:
+        download = await api.tellStatus(gid)
+        options = await api.getOption(gid)
+        if options.get("follow-torrent", "") == "false":
+            return
+    except Aria2rpcException as e:
+        LOGGER.error(f"onDownloadStarted: {e} GID: {gid}")
         return
     if is_metadata(download):
         LOGGER.info(f"onDownloadStarted: {gid} METADATA")
