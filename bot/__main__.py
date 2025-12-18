@@ -1,7 +1,6 @@
 from . import LOGGER, bot_loop
 from .core.telegram_manager import TgClient
 from .core.config_manager import Config
-from signal import SIGINT, signal
 
 Config.load()
 
@@ -52,6 +51,8 @@ bot_loop.run_until_complete(main())
 from .helper.ext_utils.bot_utils import create_help_buttons
 from .helper.listeners.aria2_listener import add_aria2_callbacks
 from .core.handlers import add_handlers
+from .helper.ext_utils.files_utils import exit_clean_up
+from signal import SIGINT, signal
 
 add_aria2_callbacks()
 create_help_buttons()
