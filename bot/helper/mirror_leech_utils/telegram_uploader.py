@@ -267,7 +267,7 @@ class TelegramUploader:
 
                 # --- Check if file name exists in DB ---
                 if db is not None:
-                    no_ext = await remove_extension(file_)
+                    no_ext = await remove_extension(re.sub(r"[',]", "", file_.replace("&", "and")))
                     existing = await files_col.find_one({"file_name": no_ext})
                     if existing:
                         LOGGER.info(
