@@ -1,6 +1,7 @@
 from . import LOGGER, bot_loop
 from .core.telegram_manager import TgClient
 from .core.config_manager import Config
+from signal import SIGINT, signal
 
 Config.load()
 
@@ -57,4 +58,5 @@ create_help_buttons()
 add_handlers()
 
 LOGGER.info("Bot Started!")
+signal(SIGINT, exit_clean_up)
 bot_loop.run_forever()
