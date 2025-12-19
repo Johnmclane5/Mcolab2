@@ -37,7 +37,7 @@ from ..helper.mirror_leech_utils.download_utils.telegram_download import (
     TelegramDownloadHelper,
 )
 from ..helper.telegram_helper.message_utils import send_message, get_tg_link_message
-
+from ..helper.ext_utils.extras import remove_unwanted
 
 class Mirror(TaskListener):
     def __init__(
@@ -336,7 +336,7 @@ class Mirror(TaskListener):
 
         if file_ is not None:
             msg_caption = f'{reply_to.caption if reply_to.caption else None}'
-
+            msg_caption = await remove_unwanted(msg_caption)
             await TelegramDownloadHelper(self).add_download(
                 reply_to, f"{path}/", msg_caption, session
             )
