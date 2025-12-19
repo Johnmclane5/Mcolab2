@@ -479,6 +479,30 @@ class TaskListener(TaskConfig):
         if self.thumb and await aiopath.exists(self.thumb):
             await remove(self.thumb)
 
+    async def proceed_extract_subtitle(self, path, gid):
+        LOGGER.info(f"Extracting subtitles from: {self.name}")
+        async with task_dict_lock:
+            if self.is_cancelled:
+                return
+            task_dict[self.mid] = TelegramStatus(self, None, gid, "st")
+        if self.is_file:
+            ffmpeg = FFMpeg(self)
+            if await ffmpeg.extract_subtitles(path) and self.se_only:
+                await remove(path)
+        else:
+            async for dirpath, _, files in self.async_walk(path):
+                for file in files:
+                    if not file.lower().endswith(tuple(VIDEO_SUFFIXES)):
+                        continue
+                    f_path = ospath.join(dirpath, file)
+                    ffmpeg = FFMpeg(self)
+                    if await ffmpeg.extract_subtitles(f_path) and self.se_only:
+                        await remove(f_path)
+                    if self.is_cancelled:
+                        return
+        return path
+        
+
     async def on_upload_error(self, error):
         async with task_dict_lock:
             if self.mid in task_dict:
