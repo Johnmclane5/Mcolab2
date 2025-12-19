@@ -48,7 +48,7 @@ from ..telegram_helper.message_utils import (
     update_status_message,
 )
 from ..ext_utils.files_utils import VIDEO_SUFFIXES
-
+from ..ext_utils.media_utils import FFMpeg
 
 class TaskListener(TaskConfig):
     def __init__(self):
