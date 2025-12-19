@@ -35,6 +35,8 @@ from ...core.telegram_manager import TgClient
 from ..ext_utils.bot_utils import sync_to_async
 from ..ext_utils.files_utils import is_archive, get_base_name
 from ..telegram_helper.message_utils import delete_message
+from ..telegram_helper.button_build import ButtonMaker
+from ..ext_utils.links_utils import is_url
 from ..ext_utils.media_utils import (
     get_media_info,
     get_document_type,
@@ -435,6 +437,11 @@ class TelegramUploader:
                 elif is_audio and not is_video:
                     thumb = await get_audio_thumbnail(self._up_path)
 
+            button = None
+            if is_url(self._listener.link):
+                button = ButtonMaker()
+                button.url_button("Source Link", self._listener.link)
+                button = button.build_menu(1)
             if (
                 self._listener.as_doc
                 or force_document
@@ -460,6 +467,7 @@ class TelegramUploader:
                     force_document=True,
                     disable_notification=True,
                     progress=self._upload_progress,
+                    reply_markup=button,
                 )
             elif is_video:
                 key = "videos"
@@ -497,6 +505,7 @@ class TelegramUploader:
                     supports_streaming=True,
                     disable_notification=True,
                     progress=self._upload_progress,
+                    reply_markup=button,
                 )
             elif is_audio:
                 key = "audios"
@@ -515,6 +524,7 @@ class TelegramUploader:
                     thumb=thumb,
                     disable_notification=True,
                     progress=self._upload_progress,
+                    reply_markup=button,
                 )
             else:
                 key = "photos"
@@ -526,6 +536,7 @@ class TelegramUploader:
                     caption=cap_mono,
                     disable_notification=True,
                     progress=self._upload_progress,
+                    reply_markup=button,
                 )
 
             cpy_msg = await self._copy_message()
@@ -637,8 +648,9 @@ class TelegramUploader:
                         self._sent_msg.chat.id,
                         self._sent_msg.id,
                     )
-                    if msg and (msg.document.mime_type.startswith("video/") 
-                                or msg.document.file_name.lower().endswith(".srt")):
+                    if msg and (msg.document.mime_type.startswith("video/")
+                                or msg.document.file_name.lower().endswith(".srt")
+                                or is_archive(msg.document.file_name)):
                         cpy_msg = await msg.copy(target)
                     return cpy_msg
                 except Exception as e:
