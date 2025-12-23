@@ -335,7 +335,7 @@ class Mirror(TaskListener):
                     return
 
         if file_ is not None:
-            msg_caption = f'{reply_to.caption if reply_to.caption else None}'
+            msg_caption = f'{reply_to.caption if reply_to.caption else ""}'
             msg_caption = await remove_unwanted(msg_caption)
             await TelegramDownloadHelper(self).add_download(
                 reply_to, f"{path}/", msg_caption, session
