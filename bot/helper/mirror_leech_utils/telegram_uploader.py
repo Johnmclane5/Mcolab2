@@ -410,8 +410,8 @@ class TelegramUploader:
                 elif await aiopath.isfile(thumb_path.replace("/yt-dlp-thumb", "")):
                     thumb = thumb_path.replace("/yt-dlp-thumb", "")
                 elif is_audio and not is_video:
-                    thumb = await get_audio_thumbnail(self._up_path)     
-
+                    thumb = await get_audio_thumbnail(self._up_path)
+                    
             if db is not None and is_video:
                 if self._listener.user_dict.get("IMGBB_UPLOAD") and self._listener.thumbnail_layout:
                     imgbb_thumb = await get_multiple_frames_thumbnail(
@@ -467,10 +467,7 @@ class TelegramUploader:
             elif is_video:
                 key = "videos"
                 duration = (await get_media_info(self._up_path))[0]
-                if tmdb_poster_url and thumb is None:
-                    thumb =  await self.get_custom_thumb(tmdb_poster_url)
-                    LOGGER.info("Got the poster")
-    
+
                 if thumb is None and self._listener.thumbnail_layout:
                     thumb = await get_multiple_frames_thumbnail(
                         self._up_path,
@@ -479,6 +476,7 @@ class TelegramUploader:
                     )
                 if thumb is None:
                     thumb = await get_video_thumbnail(self._up_path, duration)
+
                 if thumb is not None and thumb != "none":
                     with Image.open(thumb) as img:
                         width, height = img.size
