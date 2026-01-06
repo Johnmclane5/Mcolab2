@@ -408,7 +408,7 @@ class TelegramUploader:
                 if await aiopath.isfile(thumb_path):
                     thumb = thumb_path
                 elif await aiopath.isfile(thumb_path.replace("/yt-dlp-thumb", "")):
-                    thumb = thumb_path.replace("/yt-dlp-thumb", "")a
+                    thumb = thumb_path.replace("/yt-dlp-thumb", "")
                 elif is_audio and not is_video:aa
                     thumb = await get_audio_thumbnail(self._up_path)     
 
