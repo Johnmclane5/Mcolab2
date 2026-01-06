@@ -720,8 +720,9 @@ async def edit_user_settings(client, query):
                 fpath = token_pickle
             if await aiopath.exists(fpath):
                 await remove(fpath)
-            del user_dict[data[3]]
-            await database.update_user_doc(user_id, data[3])
+            if data[3] in user_dict:
+                del user_dict[data[3]]
+                await database.update_user_doc(user_id, data[3])
         else:
             update_user_ldata(user_id, data[3], "")
             await database.update_user_data(user_id)
@@ -778,10 +779,10 @@ async def edit_user_settings(client, query):
         await query.answer("Active user dump has been successfully set to None!", show_alert=True)
     else:
         await query.answer()
-        await delete_message(message.reply_to_message)
+        if message.reply_to_message:
+            await delete_message(message.reply_to_message)
         await delete_message(message)
-
-
+        
 @new_task
 async def get_users_settings(_, message):
     msg = ""

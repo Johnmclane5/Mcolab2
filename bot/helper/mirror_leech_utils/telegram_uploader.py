@@ -468,12 +468,17 @@ class TelegramUploader:
                 key = "videos"
                 duration = (await get_media_info(self._up_path))[0]
 
+                if tmdb_poster_url and thumb is None:
+                    thumb =  await self.get_custom_thumb(tmdb_poster_url)
+                    LOGGER.info("Got the poster")
+
                 if thumb is None and self._listener.thumbnail_layout:
                     thumb = await get_multiple_frames_thumbnail(
                         self._up_path,
                         self._listener.thumbnail_layout,
                         self._listener.screen_shots,
                     )
+
                 if thumb is None:
                     thumb = await get_video_thumbnail(self._up_path, duration)
 
