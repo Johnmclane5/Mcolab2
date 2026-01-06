@@ -402,6 +402,16 @@ class TelegramUploader:
             tmdb_poster_url = None
             is_video, is_audio, is_image = await get_document_type(self._up_path)
 
+            if not is_image and thumb is None:
+                file_name = ospath.splitext(file)[0]
+                thumb_path = f"{self._path}/yt-dlp-thumb/{file_name}.jpg"
+                if await aiopath.isfile(thumb_path):
+                    thumb = thumb_path
+                elif await aiopath.isfile(thumb_path.replace("/yt-dlp-thumb", "")):
+                    thumb = thumb_path.replace("/yt-dlp-thumb", "")a
+                elif is_audio and not is_video:aa
+                    thumb = await get_audio_thumbnail(self._up_path)     
+
             if db is not None and is_video:
                 if self._listener.user_dict.get("IMGBB_UPLOAD") and self._listener.thumbnail_layout:
                     imgbb_thumb = await get_multiple_frames_thumbnail(
@@ -427,21 +437,7 @@ class TelegramUploader:
                     tmdb_poster_url = await get_tv_poster(title, year)
                 else:
                     tmdb_poster_url = await get_movie_poster(title, year)
-
-            if is_video and thumb is None:
-                thumb = await get_video_thumbnail(self._up_path, None)
-                LOGGER.info(f"Generated thumbnail for {file}")
                 
-            if not is_image and thumb is None:
-                file_name = ospath.splitext(file)[0]
-                thumb_path = f"{self._path}/yt-dlp-thumb/{file_name}.jpg"
-                if await aiopath.isfile(thumb_path):
-                    thumb = thumb_path
-                elif await aiopath.isfile(thumb_path.replace("/yt-dlp-thumb", "")):
-                    thumb = thumb_path.replace("/yt-dlp-thumb", "")
-                elif is_audio and not is_video:
-                    thumb = await get_audio_thumbnail(self._up_path)
-
             if (
                 self._listener.as_doc
                 or force_document
