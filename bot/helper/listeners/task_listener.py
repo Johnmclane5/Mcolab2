@@ -153,9 +153,10 @@ class TaskListener(TaskConfig):
         if not await aiopath.exists(f"{self.dir}/{self.name}"):
             try:
                 files = await listdir(self.dir)
-                self.name = files[-1]
-                if self.name == "yt-dlp-thumb":
-                    self.name = files[0]
+                files = [f for f in files if f != "yt-dlp-thumb"]
+                if files:
+                    self.name = files[-1]
+                    LOGGER.info(f"Found file/s: {files}. Using: {self.name}")
             except Exception as e:
                 await self.on_upload_error(str(e))
                 return
