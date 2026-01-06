@@ -313,6 +313,7 @@ class YtDlp(TaskListener):
             "-ns": "",
             "-tl": "",
             "-ff": set(),
+            "-ud": "",
         }
 
         arg_parser(input_list[1:], args)
@@ -353,6 +354,10 @@ class YtDlp(TaskListener):
         self.bot_trans = args["-bt"]
         self.user_trans = args["-ut"]
         self.extract_subtitle = False
+        self.user_dump = args["-ud"]
+        self.merge = False
+        self.se_only = False
+
         is_bulk = args["-b"]
 
         bulk_start = 0
