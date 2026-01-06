@@ -428,6 +428,10 @@ class TelegramUploader:
                 else:
                     tmdb_poster_url = await get_movie_poster(title, year)
 
+            if is_video and thumb is None:
+                thumb = await get_video_thumbnail(self._up_path, None)
+                LOGGER.info(f"Generated thumbnail for {file}")
+                
             if not is_image and thumb is None:
                 file_name = ospath.splitext(file)[0]
                 thumb_path = f"{self._path}/yt-dlp-thumb/{file_name}.jpg"
