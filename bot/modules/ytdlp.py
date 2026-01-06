@@ -352,7 +352,7 @@ class YtDlp(TaskListener):
         self.folder_name = f"/{args["-m"]}".rstrip("/") if len(args["-m"]) > 0 else ""
         self.bot_trans = args["-bt"]
         self.user_trans = args["-ut"]
-
+        self.extract_subtitle = False
         is_bulk = args["-b"]
 
         bulk_start = 0
