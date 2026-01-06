@@ -1,4 +1,7 @@
-from aiofiles.os import path as aiopath, listdir, remove
+import os
+from aiofiles.os import path as aiopath, listdir, remove, makedirs
+from os import path as ospath
+from aioshutil import move
 from asyncio import sleep, gather
 from html import escape
 from requests import utils as rutils
@@ -478,6 +481,10 @@ class TaskListener(TaskConfig):
             await clean_download(self.up_dir)
         if self.thumb and await aiopath.exists(self.thumb):
             await remove(self.thumb)
+
+    async def async_walk(self, path):
+        for root, dirs, files in await sync_to_async(os.walk, path):
+            yield root, dirs, files
 
     async def proceed_extract_subtitle(self, path, gid):
         LOGGER.info(f"Extracting subtitles from: {self.name}")
