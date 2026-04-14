@@ -216,10 +216,10 @@ async def get_video_thumbnail(video_file, duration):
     # Fallback: use 3 seconds if still 0
     if duration == 0:
         duration = 3
-
-    # Sample from 30% to 70% of video (middle portion)
-    start_time = max(0, int(duration * 0.3))
-    end_time = max(start_time + 1, int(duration * 0.7))
+        
+    # Sample from 10% to 90% of video (avoid intro/outro)
+    start_time = max(0, int(duration * 0.1))
+    end_time = max(start_time + 1, int(duration * 0.9))
     
     cmd = [
         "taskset",
