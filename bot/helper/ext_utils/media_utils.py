@@ -237,7 +237,7 @@ async def get_video_thumbnail(video_file, duration):
         str(end_time - start_time),
         "-vf",
         # Better scene detection + face detection
-        "select='gt(scene\\,0.1)',scale=320:-1,fps=fps=0.5",
+        "select='gt(scene\\,0.1)',
         "-q:v",
         "1",
         "-frames:v",
@@ -288,7 +288,7 @@ async def _get_simple_thumbnail(video_file, duration, output_dir):
         "-i",
         video_file,
         "-vf",
-        "scale=320:-1",
+        "thumbnail",
         "-q:v",
         "1",
         "-frames:v",
