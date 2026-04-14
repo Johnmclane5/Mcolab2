@@ -208,19 +208,11 @@ async def get_video_thumbnail(video_file, duration):
     output_dir = f"{DOWNLOAD_DIR}thumbnails"
     await makedirs(output_dir, exist_ok=True)
     output = ospath.join(output_dir, f"{time()}.jpg")
-    
-    # Fetch duration if not provided
-    if duration is None or duration == 0:
+    if duration is None:
         duration = (await get_media_info(video_file))[0]
-    
-    # Fallback: use 3 seconds if still 0
     if duration == 0:
         duration = 3
-        
-    # Sample from 10% to 90% of video (avoid intro/outro)
-    start_time = max(0, int(duration * 0.1))
-    end_time = max(start_time + 1, int(duration * 0.9))
-    
+    duration = duration // 2
     cmd = [
         "taskset",
         "-c",
@@ -230,61 +222,7 @@ async def get_video_thumbnail(video_file, duration):
         "-loglevel",
         "error",
         "-ss",
-        str(start_time),
-        "-i",
-        video_file,
-        "-to",
-        str(end_time - start_time),
-        "-vf",
-        # Better scene detection + face detection
-        "select='gt(scene\\,0.1)'",
-        "-q:v",
-        "1",
-        "-frames:v",
-        "1",
-        "-threads",
-        f"{threads}",
-        output,
-    ]
-    
-    try:
-        _, err, code = await wait_for(cmd_exec(cmd), timeout=60)
-        if code != 0:
-            # Fallback to simple thumbnail if scene detection fails
-            LOGGER.warning(
-                f"Scene detection failed for {video_file}, using simple thumbnail. stderr: {err}"
-            )
-            return await _get_simple_thumbnail(video_file, duration, output_dir)
-        
-        if not await aiopath.exists(output):
-            LOGGER.error(f"Thumbnail output not created: {output}")
-            return await _get_simple_thumbnail(video_file, duration, output_dir)
-            
-    except asyncio.TimeoutError:
-        LOGGER.error(f"Timeout extracting thumbnail from video. Name: {video_file}")
-        return None
-    except Exception as e:
-        LOGGER.error(f"Unexpected error extracting thumbnail: {e}. File: {video_file}")
-        return None
-    
-    return output
-
-
-async def _get_simple_thumbnail(video_file, duration, output_dir):
-    """Fallback: Get simple thumbnail from middle of video"""
-    output = ospath.join(output_dir, f"{time()}.jpg")
-    seek_time = max(0, duration // 2)
-    
-    cmd = [
-        "taskset",
-        "-c",
-        f"{cores}",
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-ss",
-        str(seek_time),
+        f"{duration}",
         "-i",
         video_file,
         "-vf",
@@ -297,16 +235,20 @@ async def _get_simple_thumbnail(video_file, duration, output_dir):
         f"{threads}",
         output,
     ]
-    
     try:
         _, err, code = await wait_for(cmd_exec(cmd), timeout=60)
         if code != 0 or not await aiopath.exists(output):
-            LOGGER.error(f"Simple thumbnail also failed: {err}")
+            LOGGER.error(
+                f"Error while extracting thumbnail from video. Name: {video_file} stderr: {err}"
+            )
             return None
-        return output
-    except Exception as e:
-        LOGGER.error(f"Simple thumbnail error: {e}")
+    except:
+        LOGGER.error(
+            f"Error while extracting thumbnail from video. Name: {video_file}. Error: Timeout some issues with ffmpeg with specific arch!"
+        )
         return None
+    return output
+
 
 async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
     ss_nb = layout.split("x")
