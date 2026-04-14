@@ -212,7 +212,12 @@ async def get_video_thumbnail(video_file, duration):
         duration = (await get_media_info(video_file))[0]
     if duration == 0:
         duration = 3
-    duration = duration // 2
+        
+    # Get random timestamp from the middle 50% of the video
+    middle_start = duration // 4      # Start at 25% mark
+    middle_end = (duration * 3) // 4  # End at 75% mark
+    duration = random.randint(middle_start, middle_end)  # ← Random from middle
+    
     cmd = [
         "taskset",
         "-c",
