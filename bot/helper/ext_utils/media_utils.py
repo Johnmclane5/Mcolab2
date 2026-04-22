@@ -811,8 +811,7 @@ class FFMpeg:
             ]
         elif mp4_files and srt_files:
             original_video = mp4_files[0]
-            if not output_path.lower().endswith(".mkv"):
-                output_path = f"{ospath.splitext(output_path)[0]}.mkv"
+            output_path = f"{ospath.splitext(original_video)[0]}.mkv"
             cmd = [
                 "ffmpeg",
                 "-hide_banner",
@@ -830,7 +829,7 @@ class FFMpeg:
                     "-c:a",
                     "copy",
                     "-c:s",
-                    "copy",
+                    "srt",
                     "-map",
                     "0:v",
                     "-map",
@@ -838,7 +837,10 @@ class FFMpeg:
                 ]
             )
             for idx in range(1, len(srt_files) + 1):
-                cmd.extend(["-map", str(idx)])
+                cmd.extend(["-map", f"{idx}:s:0"])
+            cmd.extend(
+                ["-metadata:s:s:0", "language=eng", "-disposition:s:s:0", "default"]
+            )
             cmd.append(output_path)
 
         if not cmd:
