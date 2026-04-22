@@ -760,107 +760,116 @@ class FFMpeg:
 
     async def merge_videos(self, folder_path, output_path):
         self.clear()
-
         self._total_time = 0
 
-        # Collect all video files in the folder
         mkv_files = []
-        mp4_file = []
-        srt_file = []
+        mp4_files = []
+        srt_files = []
         for root, _, files in os.walk(folder_path):
             for f in files:
-                if f.endswith(('.mkv')):
-                    mkv_files.append(os.path.join(root, f)) 
-                if f.endswith(('.mp4')):
-                    mp4_file.append(os.path.join(root, f)) 
-                if f.endswith(('.srt')):
-                    srt_file.append(os.path.join(root, f)) 
+                if f.lower().endswith(".mkv"):
+                    mkv_files.append(ospath.join(root, f))
+                elif f.lower().endswith(".mp4"):
+                    mp4_files.append(ospath.join(root, f))
+                elif f.lower().endswith(".srt"):
+                    srt_files.append(ospath.join(root, f))
 
-        # Ensure there are video files to merge
-        if not mkv_files and not mp4_file:
+        if not mkv_files and not mp4_files:
             LOGGER.error(f"No video files found in the folder: {folder_path}")
             return False
+
+        filelist_path = ospath.join(folder_path, "filelist.txt")
+        cmd = []
+
         if mkv_files:
             mkv_files.sort()
-            # Create a temporary text file for ffmpeg to read the list of video files
-            with open(os.path.join(folder_path, 'filelist.txt'), 'w', encoding='utf-8') as filelist:
+            with open(filelist_path, "w", encoding="utf-8") as filelist:
                 for video in mkv_files:
-                    safe_video = video.replace("'", "'\\''")  # Escape single quotes for FFmpeg
+                    safe_video = video.replace("'", "'\\''")
                     filelist.write(f"file '{safe_video}'\n")
 
-            # Construct the ffmpeg command to concatenate videos
             cmd = [
                 "ffmpeg",
                 "-hide_banner",
-                "-loglevel", "error",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", os.path.join(folder_path, 'filelist.txt'),
-                "-c", "copy",
-                '-map', '0:v',
-                '-map', '0:a?',      # Optional audio
-                '-map', '0:s?',      # Optional subtitles
-                output_path
+                "-loglevel",
+                "error",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                filelist_path,
+                "-c",
+                "copy",
+                "-map",
+                "0:v",
+                "-map",
+                "0:a?",
+                "-map",
+                "0:s?",
+                output_path,
             ]
-            
-        if mp4_file and srt_file:
-            # Use MKV format for output and original video file name
-            original_video = mp4_file[0]
-            base_name, _ = os.path.splitext(original_video)
-            output_mkv = f"{base_name}.mkv"
+        elif mp4_files and srt_files:
+            original_video = mp4_files[0]
+            output_path = f"{ospath.splitext(original_video)[0]}.mkv"
             cmd = [
                 "ffmpeg",
                 "-hide_banner",
-                "-loglevel", "error",
-                '-i', original_video,
+                "-loglevel",
+                "error",
+                "-i",
+                original_video,
             ]
-            # Add all subtitle files as inputs
-            for srt in srt_file:
-                cmd.extend(['-i', srt])
-            cmd.extend([
-                '-c:v', 'copy',
-                '-c:a', 'copy',
-                '-c:s', 'copy',
-            ])
-            # Map video and audio
-            cmd.extend(['-map', '0:v', '-map', '0:a'])
-            # Map all subtitle streams
-            for idx in range(1, len(srt_file) + 1):
-                cmd.extend(['-map', str(idx)])
-            cmd.append(output_mkv)
-            LOGGER.info(f"{cmd}")
-            output_path = output_mkv
-            
+            for srt in srt_files:
+                cmd.extend(["-i", srt])
+            cmd.extend(
+                [
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "copy",
+                    "-c:s",
+                    "srt",
+                    "-map",
+                    "0:v",
+                    "-map",
+                    "0:a",
+                ]
+            )
+            for idx in range(1, len(srt_files) + 1):
+                cmd.extend(["-map", f"{idx}:s:0"])
+            cmd.extend(
+                ["-metadata:s:s:0", "language=eng", "-disposition:s:s:0", "default"]
+            )
+            cmd.append(output_path)
+
+        if not cmd:
+            return False
+
         if self._listener.is_cancelled:
             return False
-        
-        # Execute the ffmpeg command
+
         self._listener.subproc = await create_subprocess_exec(
-            *cmd,
-            stdout=PIPE,
-            stderr=PIPE,
+            *cmd, stdout=PIPE, stderr=PIPE
         )
-        
         await self._ffmpeg_progress()
         _, stderr = await self._listener.subproc.communicate()
         code = self._listener.subproc.returncode
-        
-        # Clean up the temporary file list
-        #os.remove(os.path.join(folder_path, 'filelist.txt'))
-        for file in mkv_files:
-            try:
-                os.remove(file)  # Deletes the file
-            except Exception as e:
-                LOGGER.info(f"Error deleting {file}: {e}")
-                
-        if mp4_file:
-            os.remove(mp4_file[0])
- 
+
+        if ospath.exists(filelist_path):
+            os.remove(filelist_path)
+
         if self._listener.is_cancelled:
             return False
+
         if code == 0:
+            for file in mkv_files + mp4_files + srt_files:
+                try:
+                    os.remove(file)
+                except Exception as e:
+                    LOGGER.error(f"Error deleting {file}: {e}")
             return output_path
-        if code == -9:
+        elif code == -9:
             self._listener.is_cancelled = True
             return False
         

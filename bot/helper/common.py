@@ -1139,7 +1139,9 @@ class TaskConfig:
                     except:
                         self.is_cancelled = True
 
-    async def proceed_merge(self, dl_path, gid, output_name):  
+    async def proceed_merge(self, dl_path, gid, output_name):
+        if await aiopath.isfile(dl_path):
+            return dl_path
         checked = False
         output_path = ospath.join(dl_path, output_name)
         try:
@@ -1149,20 +1151,15 @@ class TaskConfig:
             if not checked:
                 checked = True
                 async with task_dict_lock:
-                    task_dict[self.mid] = FFmpegStatus(
-                     self,
-                        ffmpeg,
-                        gid,
-                        "FFmpeg",
-                    )
+                    task_dict[self.mid] = FFmpegStatus(self, ffmpeg, gid, "Merge")
                 self.progress = False
                 await cpu_eater_lock.acquire()
                 self.progress = True
-            LOGGER.info(f"Running ffmpeg cmd for: {dl_path}")
+            LOGGER.info(f"Running merge for: {dl_path}")
             self.subsize = await get_path_size(dl_path)
             self.subname = output_name
-            await ffmpeg.merge_videos(dl_path, output_path)
+            res = await ffmpeg.merge_videos(dl_path, output_path)
+            return res or dl_path
         finally:
             if checked:
-                    cpu_eater_lock.release()
-                    return output_path
+                cpu_eater_lock.release()
