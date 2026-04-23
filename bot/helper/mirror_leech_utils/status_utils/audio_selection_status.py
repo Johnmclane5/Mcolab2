@@ -7,3 +7,12 @@ class AudioSelectionStatus(TelegramStatus):
 
     def status(self):
         return "Waiting for Audio Selection"
+
+    def processed_bytes(self):
+        return "0B"
+
+    def speed(self):
+        return "0B/s"
+
+    def eta(self):
+        return "-"
