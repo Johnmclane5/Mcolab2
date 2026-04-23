@@ -20,7 +20,7 @@ async def audio_selection_callback(_, query):
         return
 
     if (
-        user_id != task.user_id
+        user_id != task.listener.user_id
         and (user_id not in user_data or not user_data[user_id].get("SUDO"))
     ):
         await query.answer("This task is not for you!", show_alert=True)
@@ -29,5 +29,5 @@ async def audio_selection_callback(_, query):
     await query.answer()
 
     action = data[2]
-    task.audio_data = action
-    task.audio_event.set()
+    task.listener.audio_data = action
+    task.listener.audio_event.set()

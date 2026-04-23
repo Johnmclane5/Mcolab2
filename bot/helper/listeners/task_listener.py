@@ -2,7 +2,7 @@ import os
 from aiofiles.os import path as aiopath, listdir, remove, makedirs
 from os import path as ospath
 from aioshutil import move
-from asyncio import sleep, gather
+from asyncio import sleep, gather, Event, wait_for
 from html import escape
 from requests import utils as rutils
 
@@ -33,6 +33,7 @@ from ..ext_utils.files_utils import (
     remove_excluded_files,
     remove_non_included_files,
     move_and_merge,
+    VIDEO_SUFFIXES,
 )
 from ..ext_utils.links_utils import is_gdrive_id
 from ..ext_utils.status_utils import get_readable_file_size
@@ -43,15 +44,10 @@ from ..mirror_leech_utils.status_utils.gdrive_status import GoogleDriveStatus
 from ..mirror_leech_utils.status_utils.queue_status import QueueStatus
 from ..mirror_leech_utils.status_utils.rclone_status import RcloneStatus
 from ..mirror_leech_utils.status_utils.telegram_status import TelegramStatus
+from ..mirror_leech_utils.status_utils.ffmpeg_status import FFmpegStatus
 from ..mirror_leech_utils.telegram_uploader import TelegramUploader
 from ..telegram_helper.button_build import ButtonMaker
-from ..telegram_helper.message_utils import (
-    send_message,
-    delete_status,
-    update_status_message,
-)
-from ..ext_utils.files_utils import VIDEO_SUFFIXES
-from ..ext_utils.media_utils import FFMpeg, get_audio_tracks
+from ..ext_utils.media_utils import FFMpeg, get_audio_tracks, get_document_type
 from ..mirror_leech_utils.status_utils.audio_selection_status import AudioSelectionStatus
 from ..telegram_helper.audio_utils import create_audio_selection_buttons
 from ..telegram_helper.message_utils import (
@@ -61,7 +57,6 @@ from ..telegram_helper.message_utils import (
     delete_message,
     edit_message,
 )
-from asyncio import Event, wait_for
 
 class TaskListener(TaskConfig):
     def __init__(self):
@@ -593,10 +588,20 @@ class TaskListener(TaskConfig):
 
             if self.audio_selected_indices or self.remove_all_audio:
                 ffmpeg = FFMpeg(self)
+                async with task_dict_lock:
+                    task_dict[self.mid] = FFmpegStatus(self, ffmpeg, gid, "FFmpeg")
+
                 base, ext = ospath.splitext(video_file)
                 output_path = f"{base}_removed.mkv"
 
-                res = await ffmpeg.remove_audio_tracks(video_file, output_path, self.audio_selected_indices, self.remove_all_audio)
+                # Robust Apply to All: Filter indices that exist in current file
+                valid_indices = [t['index'] for t in tracks]
+                filtered_indices = [idx for idx in self.audio_selected_indices if idx in valid_indices]
+
+                if not filtered_indices and not self.remove_all_audio:
+                    continue
+
+                res = await ffmpeg.remove_audio_tracks(video_file, output_path, filtered_indices, self.remove_all_audio)
                 if res:
                     await remove(video_file)
                     if self.is_file:

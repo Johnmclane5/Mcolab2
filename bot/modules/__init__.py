@@ -27,6 +27,7 @@ from .stats import bot_stats, get_packages_version
 from .status import task_status, status_pages
 from .users_settings import get_users_settings, edit_user_settings, send_user_settings
 from .ytdlp import ytdl, ytdl_leech
+from .audio_selection import audio_selection_callback
 
 __all__ = [
     "send_bot_settings",
@@ -74,4 +75,5 @@ __all__ = [
     "send_user_settings",
     "ytdl",
     "ytdl_leech",
+    "audio_selection_callback",
 ]
