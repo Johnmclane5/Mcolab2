@@ -2,7 +2,7 @@ import os
 from aiofiles.os import path as aiopath, listdir, remove, makedirs
 from os import path as ospath
 from aioshutil import move
-from asyncio import sleep, gather
+from asyncio import sleep, gather, Event, wait_for
 from html import escape
 from requests import utils as rutils
 
@@ -33,6 +33,7 @@ from ..ext_utils.files_utils import (
     remove_excluded_files,
     remove_non_included_files,
     move_and_merge,
+    VIDEO_SUFFIXES,
 )
 from ..ext_utils.links_utils import is_gdrive_id
 from ..ext_utils.status_utils import get_readable_file_size
@@ -43,15 +44,19 @@ from ..mirror_leech_utils.status_utils.gdrive_status import GoogleDriveStatus
 from ..mirror_leech_utils.status_utils.queue_status import QueueStatus
 from ..mirror_leech_utils.status_utils.rclone_status import RcloneStatus
 from ..mirror_leech_utils.status_utils.telegram_status import TelegramStatus
+from ..mirror_leech_utils.status_utils.ffmpeg_status import FFmpegStatus
 from ..mirror_leech_utils.telegram_uploader import TelegramUploader
 from ..telegram_helper.button_build import ButtonMaker
+from ..ext_utils.media_utils import FFMpeg, get_audio_tracks, get_document_type
+from ..mirror_leech_utils.status_utils.audio_selection_status import AudioSelectionStatus
+from ..telegram_helper.audio_utils import create_audio_selection_buttons
 from ..telegram_helper.message_utils import (
     send_message,
     delete_status,
     update_status_message,
+    delete_message,
+    edit_message,
 )
-from ..ext_utils.files_utils import VIDEO_SUFFIXES
-from ..ext_utils.media_utils import FFMpeg
 
 class TaskListener(TaskConfig):
     def __init__(self):
@@ -245,6 +250,15 @@ class TaskListener(TaskConfig):
             self.files_to_proceed = []
             self.proceed_count = 0
             self.progress = True
+
+        if self.remove_audio:
+            up_path = await self.proceed_remove_audio(up_path, gid)
+            if self.is_cancelled:
+                return
+            self.is_file = await aiopath.isfile(up_path)
+            up_dir, self.name = up_path.rsplit("/", 1)
+            self.size = await get_path_size(up_dir)
+            self.clear()
 
 
 
@@ -485,6 +499,117 @@ class TaskListener(TaskConfig):
     async def async_walk(self, path):
         for root, dirs, files in await sync_to_async(os.walk, path):
             yield root, dirs, files
+
+    async def proceed_remove_audio(self, path, gid):
+        LOGGER.info(f"Audio removal triggered for: {self.name}")
+
+        video_files = []
+        if self.is_file:
+            if (await get_document_type(path))[0]:
+                video_files.append(path)
+        else:
+            for dirpath, _, files in await sync_to_async(os.walk, path):
+                for file in files:
+                    f_path = ospath.join(dirpath, file)
+                    if (await get_document_type(f_path))[0]:
+                        video_files.append(f_path)
+
+        if not video_files:
+            return path
+
+        self.audio_event = Event()
+        self.audio_data = None
+        self.audio_selected_indices = []
+        self.apply_to_all = False
+        self.remove_all_audio = False
+
+        async with task_dict_lock:
+            task_dict[self.mid] = AudioSelectionStatus(self, gid)
+
+        for i, video_file in enumerate(video_files):
+            if self.is_cancelled:
+                break
+
+            tracks = await get_audio_tracks(video_file)
+            if not tracks:
+                continue
+
+            if not self.apply_to_all:
+                self.audio_selected_indices = []
+                self.remove_all_audio = False
+                self.audio_data = None
+                self.audio_event.clear()
+
+                buttons = create_audio_selection_buttons(self.mid, tracks, self.audio_selected_indices, len(video_files) > 1 and i == 0)
+                msg = f"Select audio tracks to REMOVE from:\n<code>{ospath.basename(video_file)}</code>"
+                selection_message = await send_message(self.message, msg, buttons)
+
+                try:
+                    while True:
+                        await wait_for(self.audio_event.wait(), timeout=120)
+                        self.audio_event.clear()
+
+                        if self.audio_data == "done":
+                            break
+                        elif self.audio_data == "cancel":
+                            self.is_cancelled = True
+                            await edit_message(selection_message, "Task Cancelled.")
+                            break
+                        elif self.audio_data == "all":
+                            self.remove_all_audio = not self.remove_all_audio
+                            self.audio_selected_indices = [t['index'] for t in tracks] if self.remove_all_audio else []
+                        elif self.audio_data == "applyall":
+                            self.apply_to_all = True
+                            break
+                        elif self.audio_data.isdigit():
+                            idx = int(self.audio_data)
+                            if idx in self.audio_selected_indices:
+                                self.audio_selected_indices.remove(idx)
+                                self.remove_all_audio = False
+                            else:
+                                self.audio_selected_indices.append(idx)
+                                if len(self.audio_selected_indices) == len(tracks):
+                                    self.remove_all_audio = True
+
+                        buttons = create_audio_selection_buttons(self.mid, tracks, self.audio_selected_indices, len(video_files) > 1 and i == 0)
+                        await edit_message(selection_message, msg, buttons)
+                except Exception as e:
+                    LOGGER.error(f"Audio selection timeout or error: {e}")
+                    self.is_cancelled = True
+                    await edit_message(selection_message, "Timed out! Task Cancelled.")
+
+                if self.is_cancelled:
+                    await sleep(2)
+                    await delete_message(selection_message)
+                    await self.on_upload_error("Audio selection timed out or cancelled!")
+                    return path
+
+                await delete_message(selection_message)
+
+            if self.audio_selected_indices or self.remove_all_audio:
+                ffmpeg = FFMpeg(self)
+                async with task_dict_lock:
+                    task_dict[self.mid] = FFmpegStatus(self, ffmpeg, gid, "FFmpeg")
+
+                base, ext = ospath.splitext(video_file)
+                output_path = f"{base}_removed.mkv"
+
+                # Robust Apply to All: Filter indices that exist in current file
+                valid_indices = [t['index'] for t in tracks]
+                filtered_indices = [idx for idx in self.audio_selected_indices if idx in valid_indices]
+
+                if not filtered_indices and not self.remove_all_audio:
+                    continue
+
+                res = await ffmpeg.remove_audio_tracks(video_file, output_path, filtered_indices, self.remove_all_audio)
+                if res:
+                    await remove(video_file)
+                    if self.is_file:
+                        path = output_path
+                else:
+                    LOGGER.error(f"Failed to remove audio from {video_file}")
+
+        return path
 
     async def proceed_extract_subtitle(self, path, gid):
         LOGGER.info(f"Extracting subtitles from: {self.name}")

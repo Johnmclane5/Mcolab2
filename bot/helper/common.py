@@ -116,6 +116,7 @@ class TaskConfig:
         self.is_rss = False
         self.progress = True
         self.ffmpeg_cmds = None
+        self.remove_audio = False
         self.chat_thread_id = None
         self.subproc = None
         self.thumb = None

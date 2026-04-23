@@ -314,6 +314,7 @@ class YtDlp(TaskListener):
             "-tl": "",
             "-ff": set(),
             "-ud": "",
+            "-ra": False,
         }
 
         arg_parser(input_list[1:], args)
@@ -357,6 +358,7 @@ class YtDlp(TaskListener):
         self.user_dump = args["-ud"]
         self.merge = False
         self.se_only = False
+        self.remove_audio = args["-ra"]
 
         is_bulk = args["-b"]
 

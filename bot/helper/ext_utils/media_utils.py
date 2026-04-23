@@ -1,5 +1,6 @@
 import os
 import random
+import json
 from PIL import Image
 from aiofiles.os import remove, path as aiopath, makedirs
 from asyncio import (
@@ -253,6 +254,47 @@ async def get_video_thumbnail(video_file, duration):
         )
         return None
     return output
+
+
+async def get_audio_tracks(path):
+    try:
+        result = await cmd_exec(
+            [
+                "ffprobe",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-print_format",
+                "json",
+                "-show_streams",
+                "-select_streams",
+                "a",
+                path,
+            ]
+        )
+    except Exception as e:
+        LOGGER.error(
+            f"Get Audio Tracks Info: {e}. Mostly File not found! - File: {path}"
+        )
+        return []
+    if result[0] and result[2] == 0:
+        try:
+            streams = json.loads(result[0]).get("streams", [])
+        except Exception as e:
+            LOGGER.error(f"Get Audio Tracks Info (JSON Parse): {e}. result: {result[0]}")
+            return []
+        tracks = []
+        for stream in streams:
+            index = stream.get("index")
+            tags = stream.get("tags", {})
+            lang = tags.get("language") or "unknown"
+            title = tags.get("title") or "No Title"
+            codec = stream.get("codec_name")
+            tracks.append(
+                {"index": index, "lang": lang, "title": title, "codec": codec}
+            )
+        return tracks
+    return []
 
 
 async def get_multiple_frames_thumbnail(video_file, layout, keep_screenshots):
@@ -926,3 +968,59 @@ class FFMpeg:
                 f"{stderr}. Something went wrong while extracting subtitles. Path: {video_file}"
             )
         return False
+
+    async def remove_audio_tracks(
+        self, input_path, output_path, indices_to_remove, remove_all=False
+    ):
+        self.clear()
+        self._total_time = (await get_media_info(input_path))[0]
+
+        cmd = [
+            "taskset",
+            "-c",
+            f"{cores}",
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-progress",
+            "pipe:1",
+            "-i",
+            input_path,
+        ]
+
+        if remove_all:
+            cmd.extend(["-map", "0", "-map", "-0:a"])
+        else:
+            cmd.extend(["-map", "0"])
+            for index in indices_to_remove:
+                cmd.extend(["-map", f"-0:{index}"])
+
+        cmd.extend(["-c", "copy", "-threads", f"{threads}", output_path])
+
+        if self._listener.is_cancelled:
+            return False
+        self._listener.subproc = await create_subprocess_exec(
+            *cmd, stdout=PIPE, stderr=PIPE
+        )
+        await self._ffmpeg_progress()
+        _, stderr = await self._listener.subproc.communicate()
+        code = self._listener.subproc.returncode
+        if self._listener.is_cancelled:
+            return False
+        if code == 0:
+            return True
+        elif code == -9:
+            self._listener.is_cancelled = True
+            return False
+        else:
+            try:
+                stderr = stderr.decode().strip()
+            except:
+                stderr = "Unable to decode the error!"
+            LOGGER.error(
+                f"{stderr}. Something went wrong while removing audio tracks. Path: {input_path}"
+            )
+            if await aiopath.exists(output_path):
+                await remove(output_path)
+            return False
