@@ -120,6 +120,7 @@ def arg_parser(items, arg_base):
         "-med",
         "-ut",
         "-bt",
+        "-ra",
     }
 
     while i < total:

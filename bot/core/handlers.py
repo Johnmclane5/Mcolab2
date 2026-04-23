@@ -2,6 +2,7 @@ from pyrogram.filters import command, regex
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler, EditedMessageHandler
 
 from ..modules import *
+from ..modules.audio_selection import audio_selection_callback
 from ..helper.telegram_helper.bot_commands import BotCommands
 from ..helper.telegram_helper.filters import CustomFilters
 from .telegram_manager import TgClient
@@ -105,6 +106,9 @@ def add_handlers():
     )
     TgClient.bot.add_handler(
         CallbackQueryHandler(confirm_selection, filters=regex("^sel"))
+    )
+    TgClient.bot.add_handler(
+        CallbackQueryHandler(audio_selection_callback, filters=regex("^audsel"))
     )
     TgClient.bot.add_handler(
         MessageHandler(
