@@ -13,7 +13,6 @@ class Config:
     BOT_TOKEN = ""
     CMD_SUFFIX = ""
     DATABASE_URL = ""
-    IBB_URL = ""
     DEFAULT_UPLOAD = "rc"
     EQUAL_SPLITS = False
     EXCLUDED_EXTENSIONS = ""

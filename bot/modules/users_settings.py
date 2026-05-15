@@ -182,17 +182,6 @@ async def get_user_settings(from_user, stype="main"):
         else:
             thumb_layout = "None"
 
-        if user_dict.get("IMGBB_UPLOAD", False):
-            buttons.data_button(
-                "Disable IMGBB_UPLOAD", f"userset {user_id} tog IMGBB_UPLOAD f"
-            )
-            mf_thumb = "Enabled"
-        else:
-            buttons.data_button(
-                "Enable IMGBB_UPLOAD", f"userset {user_id} tog IMGBB_UPLOAD t"
-            )
-            mf_thumb = "Disabled"
-
         buttons.data_button("Back", f"userset {user_id} back")
         buttons.data_button("Close", f"userset {user_id} close")
 
@@ -208,7 +197,6 @@ Leech by <b>{leech_method}</b> session
 HYBRID Leech is <b>{hybrid_leech}</b>
 Thumbnail Layout is <b>{thumb_layout}</b>
 User dumps <code>{udump}</code>
-IMGBB_Upload is <b>{mf_thumb}</b>
 """
     elif stype == "rclone":
         buttons.data_button("Rclone Config", f"userset {user_id} menu RCLONE_CONFIG")
