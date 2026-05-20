@@ -166,7 +166,7 @@ async def take_ss(video_file, ss_nb) -> bool:
     else:
         LOGGER.error("take_ss: Can't get the duration of video")
         return False
-
+    
 async def get_audio_thumbnail(audio_file):
     output_dir = f"{DOWNLOAD_DIR}thumbnails"
     await makedirs(output_dir, exist_ok=True)
