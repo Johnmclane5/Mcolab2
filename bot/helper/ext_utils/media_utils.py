@@ -969,7 +969,7 @@ class FFMpeg:
                     except:
                         pass
                 if len(mp4_files) == 1 and res:
-                    return folder_path
+                    return out_path
 
             return folder_path
 
