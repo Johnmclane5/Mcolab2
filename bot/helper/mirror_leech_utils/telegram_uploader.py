@@ -44,7 +44,7 @@ from ..ext_utils.media_utils import (
 )
 from ..ext_utils.extras import remove_redandent, get_movie_poster, get_tv_poster
 from ..ext_utils.bot_utils import sync_to_async, download_image_url
-from ..ext_utils.db_handler import DbManager
+from ..ext_utils.db_handler import database
 
 LOGGER = getLogger(__name__)
 
@@ -572,11 +572,11 @@ class TelegramUploader:
             try:
                 file_info = extract_file_info(self._sent_msg)
                 if file_info and file_info.get("file_name"):
-                    # Check if DbManager.db is available and connected
-                    if DbManager.db is None:
+                    # Check if database is connected
+                    if database.db is None or database.pixhostdb is None:
                         LOGGER.error("Database not connected. Skipping DB operations.")
                     else:
-                        files_collection = DbManager.db.pixhost_files["files_col"]
+                        files_collection = database.pixhostdb["files_col"]
 
                         existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
 
