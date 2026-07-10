@@ -151,6 +151,7 @@ class TelegramUploader:
         self._user_session = self._listener.user_transmission
         self._error = ""
         self._user_dump = ""
+        self._current_poster_url = None
 
     async def get_custom_thumb(self, thumb):
         photo_dir = await download_image_url(thumb)
@@ -332,6 +333,7 @@ class TelegramUploader:
             for file_ in natsorted(files):
                 self._error = ""
                 self._up_path = f_path = ospath.join(dirpath, file_)
+                self._current_poster_url = None
                 if not await aiopath.exists(self._up_path):
                     if intervals["stopAll"]:
                         return
@@ -445,6 +447,39 @@ class TelegramUploader:
         try:
             tmdb_poster_url = None
             is_video, is_audio, is_image = await get_document_type(self._up_path)
+
+            if is_video and database.db is not None and database.pixhostdb is not None:
+                if self._current_poster_url is None:
+                    # Normalize the filename to check in DB
+                    normalized_name = remove_extension(
+                        re.sub(r"[',]", "", file.replace("&", "and")).split("\n")[0]
+                    )
+                    if normalized_name:
+                        files_collection = database.pixhostdb["files_col"]
+                        existing_file = await files_collection.find_one({"file_name": normalized_name})
+                        
+                        # Get video thumbnail using get_video_thumbnail
+                        duration = (await get_media_info(self._up_path))[0]
+                        video_thumb = await get_video_thumbnail(self._up_path, duration)
+                        
+                        # Upload video_thumb to Pixhost
+                        poster_url = None
+                        if video_thumb:
+                            poster_url = await upload_to_pixhost(video_thumb)
+                            if video_thumb != thumb and await aiopath.exists(video_thumb):
+                                await remove(video_thumb)
+                        
+                        self._current_poster_url = poster_url or "none"
+
+                        if existing_file:
+                            # Update existing record with the new poster url
+                            if poster_url:
+                                await files_collection.update_one(
+                                    {"_id": existing_file["_id"]},
+                                    {"$set": {"poster_url": poster_url}}
+                                )
+                                LOGGER.info(f"Updated poster_url in DB for existing file: {normalized_name}")
+                            raise UploadCancelled("File already present in DB.")
 
             if not is_image and thumb is None:
                 file_name = ospath.splitext(file)[0]
@@ -568,47 +603,18 @@ class TelegramUploader:
                     progress=self._upload_progress,
                 )
 
-            # Run the database check and Pixhost integration
+            # Insert file info to DB if it's a video and database is connected
             try:
-                file_info = extract_file_info(self._sent_msg)
-                if file_info and file_info.get("file_name"):
-                    # Check if database is connected
-                    if database.db is None or database.pixhostdb is None:
-                        LOGGER.error("Database not connected. Skipping DB operations.")
-                    else:
+                if is_video and database.db is not None and database.pixhostdb is not None:
+                    file_info = extract_file_info(self._sent_msg)
+                    if file_info and file_info.get("file_name"):
                         files_collection = database.pixhostdb["files_col"]
-
-                        existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
-
-                        # Upload thumbnail to Pixhost
-                        poster_url = await upload_to_pixhost(thumb)
-
-                        if existing_file:
-                            # Update existing record with the new poster url
-                            if poster_url:
-                                await files_collection.update_one(
-                                    {"_id": existing_file["_id"]},
-                                    {"$set": {"poster_url": poster_url}}
-                                )
-                                LOGGER.info(f"Updated poster_url in DB for file: {file_info['file_name']}")
-
-                                # Cancel/delete the newly uploaded Telegram message
-                                try:
-                                    await self._sent_msg.delete()
-                                    LOGGER.info(f"Deleted the newly uploaded Telegram message since the file already exists in DB.")
-                                except Exception as e:
-                                    LOGGER.error(f"Error deleting telegram message: {e}")
-
-                                raise UploadCancelled("File already present in DB.")
-                        else:
-                            # File is not present in DB, insert new record
-                            file_info["poster_url"] = poster_url
-                            await files_collection.insert_one(file_info)
-                            LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
-            except UploadCancelled:
-                raise
+                        poster_url = self._current_poster_url if self._current_poster_url != "none" else None
+                        file_info["poster_url"] = poster_url
+                        await files_collection.insert_one(file_info)
+                        LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
             except Exception as db_err:
-                LOGGER.error(f"Error in Pixhost/DB integration: {db_err}")
+                LOGGER.error(f"Error inserting new video into DB: {db_err}")
 
             await self._copy_message()
 
