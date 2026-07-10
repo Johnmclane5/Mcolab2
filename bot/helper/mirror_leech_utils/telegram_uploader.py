@@ -44,6 +44,7 @@ from ..ext_utils.media_utils import (
 )
 from ..ext_utils.extras import remove_redandent, get_movie_poster, get_tv_poster
 from ..ext_utils.bot_utils import sync_to_async, download_image_url
+from ..ext_utils.db_handler import DbManager
 
 LOGGER = getLogger(__name__)
 
@@ -571,35 +572,21 @@ class TelegramUploader:
             try:
                 file_info = extract_file_info(self._sent_msg)
                 if file_info and file_info.get("file_name"):
-                    from motor.motor_asyncio import AsyncIOMotorClient as AsyncMongoClient
-                    from pymongo.server_api import ServerApi
-                    from os import getenv
-                    from ...core.config_manager import Config
+                    files_collection = DbManager.self_pixhostdb["files_col"]
 
-                    pixhost_db_url = getenv("PIXHOSTDB_URL") or (Config.DATABASE_URL if hasattr(Config, "DATABASE_URL") else "") or getenv("DATABASE_URL")
-                    if pixhost_db_url:
-                        mongo_client = AsyncMongoClient(
-                            pixhost_db_url,
-                            server_api=ServerApi("1"),
-                            connectTimeoutMS=60000,
-                            serverSelectionTimeoutMS=60000,
-                        )
-                        db_sharing = mongo_client["sharingx_bot"]
-                        files_collection = db_sharing["files_col"]
+                    existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
 
-                        existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
+                    # Upload thumbnail to Pixhost
+                    poster_url = await upload_to_pixhost(thumb)
 
-                        # Upload thumbnail to Pixhost
-                        poster_url = await upload_to_pixhost(thumb)
-
-                        if existing_file:
-                            # Update existing record with the new poster url
-                            if poster_url:
-                                await files_collection.update_one(
-                                    {"_id": existing_file["_id"]},
-                                    {"$set": {"poster_url": poster_url}}
-                                )
-                                LOGGER.info(f"Updated poster_url in DB for file: {file_info['file_name']}")
+                    if existing_file:
+                        # Update existing record with the new poster url
+                        if poster_url:
+                            await files_collection.update_one(
+                                {"_id": existing_file["_id"]},
+                                {"$set": {"poster_url": poster_url}}
+                            )
+                            LOGGER.info(f"Updated poster_url in DB for file: {file_info['file_name']}")
 
                             # Cancel/delete the newly uploaded Telegram message
                             try:
@@ -609,11 +596,11 @@ class TelegramUploader:
                                 LOGGER.error(f"Error deleting telegram message: {e}")
 
                             raise UploadCancelled("File already present in DB.")
-                        else:
-                            # File is not present in DB, insert new record
-                            file_info["poster_url"] = poster_url
-                            await files_collection.insert_one(file_info)
-                            LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
+                    else:
+                        # File is not present in DB, insert new record
+                        file_info["poster_url"] = poster_url
+                        await files_collection.insert_one(file_info)
+                        LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
             except UploadCancelled:
                 raise
             except Exception as db_err:

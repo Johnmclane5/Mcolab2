@@ -27,6 +27,7 @@ class DbManager:
                 serverSelectionTimeoutMS=60000,
             )
             self.db = self._conn.mltb
+            self.pixhostdb = self._conn.sharingx_bot
             self._return = False
         except PyMongoError as e:
             LOGGER.error(f"Error in DB connection: {e}")
