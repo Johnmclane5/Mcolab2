@@ -42,10 +42,91 @@ from ..ext_utils.media_utils import (
     get_audio_thumbnail,
     get_multiple_frames_thumbnail,
 )
-from ..ext_utils.extras import remove_extension, remove_redandent, get_movie_poster, get_tv_poster, extract_file_info
+from ..ext_utils.extras import remove_redandent, get_movie_poster, get_tv_poster
 from ..ext_utils.bot_utils import sync_to_async, download_image_url
 
 LOGGER = getLogger(__name__)
+
+class UploadCancelled(Exception):
+    pass
+
+def remove_extension(caption):
+    try:
+        # Remove .mkv, .mp4, and .webm extensions if present
+        cleaned_caption = re.sub(r'\.mkv|\.mp4|\.webm', '', caption)
+        return cleaned_caption
+    except Exception as e:
+        LOGGER.error(e)
+        return None
+
+def extract_file_info(message, channel_id=None):
+    """Extract file info from a Pyrogram message."""
+    caption_name = message.caption.strip() if message.caption else None
+    file_info = {
+        "channel_id": channel_id if channel_id is not None else message.chat.id,
+        "message_id": message.id,
+        "file_name": None,
+        "file_size": None,
+        "file_format": None,
+    }
+    if message.document:
+        file_info["file_name"] = caption_name or message.document.file_name
+        file_info["file_size"] = message.document.file_size
+        file_info["file_format"] = message.document.mime_type
+    elif message.video:
+        file_info["file_name"] = caption_name or (message.video.file_name or "video.mp4")
+        file_info["file_size"] = message.video.file_size
+        file_info["file_format"] = message.video.mime_type
+    elif message.audio:
+        file_info["file_name"] = caption_name or (message.audio.file_name or "audio.mp3")
+        file_info["file_size"] = message.audio.file_size
+        file_info["file_format"] = message.audio.mime_type
+        file_info["file_title"] = message.audio.title
+        file_info["file_artist"] = message.audio.performer
+    elif message.photo:
+        file_info["file_name"] = caption_name or "photo.jpg"
+        file_info["file_size"] = getattr(message.photo, "file_size", None)
+        file_info["file_format"] = "image/jpeg"
+    if file_info["file_name"]:
+        file_info["file_name"] = remove_extension(
+            re.sub(r"[',]", "", file_info["file_name"].replace("&", "and")).split("\n")[0]
+        )
+    return file_info
+
+async def upload_to_pixhost(thumb_path):
+    if not thumb_path or not ospath.exists(thumb_path):
+        return None
+    try:
+        import aiohttp
+        import aiofiles
+        url = "https://api.pixhost.to/images"
+        data = aiohttp.FormData()
+        data.add_field("content_type", "1")
+        data.add_field("max_th_size", "420")
+
+        async with aiofiles.open(thumb_path, "rb") as f:
+            img_data = await f.read()
+        data.add_field("img", img_data, filename=ospath.basename(thumb_path))
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=data) as resp:
+                if resp.status == 200:
+                    res_json = await resp.json()
+                    LOGGER.info(f"Pixhost upload response: {res_json}")
+                    show_url = res_json.get("show_url") or res_json.get("th_url") or res_json.get("url")
+                    if not show_url:
+                        for value in res_json.values():
+                            if isinstance(value, str) and "pixhost.to" in value:
+                                show_url = value
+                                break
+                    if show_url:
+                        transformed_url = show_url.replace("pixhost.to", "img2.pixhost.to").replace("/show/", "/images/")
+                        return transformed_url
+                else:
+                    LOGGER.error(f"Pixhost upload failed with status {resp.status}: {await resp.text()}")
+    except Exception as e:
+        LOGGER.error(f"Error uploading thumbnail to Pixhost: {e}")
+    return None
 
 class TelegramUploader:
     def __init__(self, listener, path):
@@ -302,6 +383,8 @@ class TelegramUploader:
                     ):
                         self._msgs_dict[self._sent_msg.link] = file_
                     await sleep(1)
+                except UploadCancelled as err:
+                    LOGGER.info(f"Upload cancelled/skipped because file already present in DB: {err}")
                 except Exception as err:
                     if isinstance(err, RetryError):
                         LOGGER.info(
@@ -483,6 +566,58 @@ class TelegramUploader:
                     disable_notification=True,
                     progress=self._upload_progress,
                 )
+
+            # Run the database check and Pixhost integration
+            try:
+                file_info = extract_file_info(self._sent_msg)
+                if file_info and file_info.get("file_name"):
+                    from motor.motor_asyncio import AsyncIOMotorClient as AsyncMongoClient
+                    from pymongo.server_api import ServerApi
+                    from os import getenv
+                    from ...core.config_manager import Config
+
+                    pixhost_db_url = getenv("PIXHOSTDB_URL") or (Config.DATABASE_URL if hasattr(Config, "DATABASE_URL") else "") or getenv("DATABASE_URL")
+                    if pixhost_db_url:
+                        mongo_client = AsyncMongoClient(
+                            pixhost_db_url,
+                            server_api=ServerApi("1"),
+                            connectTimeoutMS=60000,
+                            serverSelectionTimeoutMS=60000,
+                        )
+                        db_sharing = mongo_client["sharing_bot"]
+                        files_collection = db_sharing["files_col"]
+
+                        existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
+
+                        # Upload thumbnail to Pixhost
+                        poster_url = await upload_to_pixhost(thumb)
+
+                        if existing_file:
+                            # Update existing record with the new poster url
+                            if poster_url:
+                                await files_collection.update_one(
+                                    {"_id": existing_file["_id"]},
+                                    {"$set": {"poster_url": poster_url}}
+                                )
+                                LOGGER.info(f"Updated poster_url in DB for file: {file_info['file_name']}")
+
+                            # Cancel/delete the newly uploaded Telegram message
+                            try:
+                                await self._sent_msg.delete()
+                                LOGGER.info(f"Deleted the newly uploaded Telegram message since the file already exists in DB.")
+                            except Exception as e:
+                                LOGGER.error(f"Error deleting telegram message: {e}")
+
+                            raise UploadCancelled("File already present in DB.")
+                        else:
+                            # File is not present in DB, insert new record
+                            file_info["poster_url"] = poster_url
+                            await files_collection.insert_one(file_info)
+                            LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
+            except UploadCancelled:
+                raise
+            except Exception as db_err:
+                LOGGER.error(f"Error in Pixhost/DB integration: {db_err}")
 
             await self._copy_message()
 
