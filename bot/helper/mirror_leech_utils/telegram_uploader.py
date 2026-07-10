@@ -584,7 +584,7 @@ class TelegramUploader:
                             connectTimeoutMS=60000,
                             serverSelectionTimeoutMS=60000,
                         )
-                        db_sharing = mongo_client["sharing_bot"]
+                        db_sharing = mongo_client["sharingx_bot"]
                         files_collection = db_sharing["files_col"]
 
                         existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
