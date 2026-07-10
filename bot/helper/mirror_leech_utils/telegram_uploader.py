@@ -572,35 +572,39 @@ class TelegramUploader:
             try:
                 file_info = extract_file_info(self._sent_msg)
                 if file_info and file_info.get("file_name"):
-                    files_collection = DbManager.self_pixhostdb["files_col"]
-
-                    existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
-
-                    # Upload thumbnail to Pixhost
-                    poster_url = await upload_to_pixhost(thumb)
-
-                    if existing_file:
-                        # Update existing record with the new poster url
-                        if poster_url:
-                            await files_collection.update_one(
-                                {"_id": existing_file["_id"]},
-                                {"$set": {"poster_url": poster_url}}
-                            )
-                            LOGGER.info(f"Updated poster_url in DB for file: {file_info['file_name']}")
-
-                            # Cancel/delete the newly uploaded Telegram message
-                            try:
-                                await self._sent_msg.delete()
-                                LOGGER.info(f"Deleted the newly uploaded Telegram message since the file already exists in DB.")
-                            except Exception as e:
-                                LOGGER.error(f"Error deleting telegram message: {e}")
-
-                            raise UploadCancelled("File already present in DB.")
+                    # Check if DbManager.db is available and connected
+                    if DbManager.db is None:
+                        LOGGER.error("Database not connected. Skipping DB operations.")
                     else:
-                        # File is not present in DB, insert new record
-                        file_info["poster_url"] = poster_url
-                        await files_collection.insert_one(file_info)
-                        LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
+                        files_collection = DbManager.db.pixhost_files["files_col"]
+
+                        existing_file = await files_collection.find_one({"file_name": file_info["file_name"]})
+
+                        # Upload thumbnail to Pixhost
+                        poster_url = await upload_to_pixhost(thumb)
+
+                        if existing_file:
+                            # Update existing record with the new poster url
+                            if poster_url:
+                                await files_collection.update_one(
+                                    {"_id": existing_file["_id"]},
+                                    {"$set": {"poster_url": poster_url}}
+                                )
+                                LOGGER.info(f"Updated poster_url in DB for file: {file_info['file_name']}")
+
+                                # Cancel/delete the newly uploaded Telegram message
+                                try:
+                                    await self._sent_msg.delete()
+                                    LOGGER.info(f"Deleted the newly uploaded Telegram message since the file already exists in DB.")
+                                except Exception as e:
+                                    LOGGER.error(f"Error deleting telegram message: {e}")
+
+                                raise UploadCancelled("File already present in DB.")
+                        else:
+                            # File is not present in DB, insert new record
+                            file_info["poster_url"] = poster_url
+                            await files_collection.insert_one(file_info)
+                            LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
             except UploadCancelled:
                 raise
             except Exception as db_err:
