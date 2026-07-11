@@ -211,7 +211,12 @@ async def get_video_thumbnail(video_file, duration):
         duration = (await get_media_info(video_file))[0]
     if duration == 0:
         duration = 3
-    duration = duration // 2
+    if duration <= 3:
+        seek_time = 1
+    else:
+        start = int(duration * 0.2)
+        end = int(duration * 0.8)
+        seek_time = int(uniform(start, end))
     cmd = [
         "taskset",
         "-c",
@@ -221,7 +226,7 @@ async def get_video_thumbnail(video_file, duration):
         "-loglevel",
         "error",
         "-ss",
-        f"{duration}",
+        f"{seek_time}",
         "-i",
         video_file,
         "-vf",
