@@ -94,7 +94,7 @@ def extract_file_info(message, channel_id=None):
         )
     return file_info
 
-async def upload_to_pixhost(thumb_path):
+async def upload_to_pixhost(thumb_path, filename=None):
     if not thumb_path or not ospath.exists(thumb_path):
         return None
     try:
@@ -107,7 +107,14 @@ async def upload_to_pixhost(thumb_path):
 
         async with aiofiles.open(thumb_path, "rb") as f:
             img_data = await f.read()
-        data.add_field("img", img_data, filename=ospath.basename(thumb_path))
+            
+        if filename:
+            name, _ = ospath.splitext(filename)
+            upload_name = f"{name}.jpg"
+        else:
+            upload_name = ospath.basename(thumb_path)
+            
+        data.add_field("img", img_data, filename=upload_name)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, data=data) as resp:
@@ -376,7 +383,9 @@ class TelegramUploader:
                             )
                     self._last_msg_in_group = False
                     self._last_uploaded = 0
-                    await self._upload_file(cap_mono, file_, f_path)
+                    res = await self._upload_file(cap_mono, file_, f_path)
+                    if res is False:
+                        continue
                     if self._listener.is_cancelled:
                         return
                     if (
@@ -465,7 +474,7 @@ class TelegramUploader:
                         # Upload video_thumb to Pixhost
                         poster_url = None
                         if video_thumb:
-                            poster_url = await upload_to_pixhost(video_thumb)
+                            poster_url = await upload_to_pixhost(video_thumb, filename=file)
                             if video_thumb != thumb and await aiopath.exists(video_thumb):
                                 await remove(video_thumb)
                         
@@ -479,7 +488,7 @@ class TelegramUploader:
                                     {"$set": {"poster_url": poster_url}}
                                 )
                                 LOGGER.info(f"Updated poster_url in DB for existing file: {normalized_name}")
-                            raise UploadCancelled("File already present in DB.")
+                            return False
 
             if not is_image and thumb is None:
                 file_name = ospath.splitext(file)[0]
