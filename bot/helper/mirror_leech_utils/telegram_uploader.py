@@ -464,7 +464,7 @@ class TelegramUploader:
                         re.sub(r"[',]", "", file.replace("&", "and")).split("\n")[0]
                     )
                     if normalized_name:
-                        files_collection = database.pixhostdb["files_col"]
+                        files_collection = database.pixhostdb["files"]
                         existing_file = await files_collection.find_one({"file_name": normalized_name})
                         
                         # Get video thumbnail using get_video_thumbnail
@@ -617,7 +617,7 @@ class TelegramUploader:
                 if is_video and database.db is not None and database.pixhostdb is not None:
                     file_info = extract_file_info(self._sent_msg)
                     if file_info and file_info.get("file_name"):
-                        files_collection = database.pixhostdb["files_col"]
+                        files_collection = database.pixhostdb["files"]
                         poster_url = self._current_poster_url if self._current_poster_url != "none" else None
                         file_info["poster_url"] = poster_url
                         await files_collection.insert_one(file_info)
