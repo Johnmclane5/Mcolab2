@@ -159,6 +159,7 @@ class TelegramUploader:
         self._error = ""
         self._user_dump = ""
         self._current_poster_url = None
+        self._current_file_name = None
 
     async def get_custom_thumb(self, thumb):
         photo_dir = await download_image_url(thumb)
@@ -341,6 +342,7 @@ class TelegramUploader:
                 self._error = ""
                 self._up_path = f_path = ospath.join(dirpath, file_)
                 self._current_poster_url = None
+                self._current_file_name = None
                 if not await aiopath.exists(self._up_path):
                     if intervals["stopAll"]:
                         return
@@ -464,6 +466,7 @@ class TelegramUploader:
                         re.sub(r"[',]", "", file.replace("&", "and")).split("\n")[0]
                     )
                     if normalized_name:
+                        self._current_file_name = normalized_name
                         files_collection = database.pixhostdb["files"]
                         existing_file = await files_collection.find_one({"file_name": normalized_name})
                         
@@ -612,20 +615,24 @@ class TelegramUploader:
                     progress=self._upload_progress,
                 )
 
-            # Insert file info to DB if it's a video and database is connected
-            try:
-                if is_video and database.db is not None and database.pixhostdb is not None:
-                    file_info = extract_file_info(self._sent_msg)
-                    if file_info and file_info.get("file_name"):
-                        files_collection = database.pixhostdb["files"]
-                        poster_url = self._current_poster_url if self._current_poster_url != "none" else None
-                        file_info["poster_url"] = poster_url
-                        await files_collection.insert_one(file_info)
-                        LOGGER.info(f"Inserted new file info in DB for file: {file_info['file_name']}")
-            except Exception as db_err:
-                LOGGER.error(f"Error inserting new video into DB: {db_err}")
-
             await self._copy_message()
+
+            # Update poster_url in DB after copy_message
+            try:
+                if is_video and database.db is not None and database.pixhostdb is not None and self._current_file_name:
+                    poster_url = self._current_poster_url if self._current_poster_url != "none" else None
+                    if poster_url:
+                        files_collection = database.pixhostdb["files"]
+                        result = await files_collection.update_one(
+                            {"file_name": self._current_file_name},
+                            {"$set": {"poster_url": poster_url}}
+                        )
+                        if result.matched_count > 0:
+                            LOGGER.info(f"Updated poster_url in DB for file: {self._current_file_name}")
+                        else:
+                            LOGGER.info(f"No existing record found for file: {self._current_file_name}")
+            except Exception as db_err:
+                LOGGER.error(f"Error updating poster_url in DB: {db_err}")
 
             if (
                 not self._listener.is_cancelled
