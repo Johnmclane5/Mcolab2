@@ -128,7 +128,7 @@ async def upload_to_pixhost(thumb_path, filename=None):
                                 show_url = value
                                 break
                     if show_url:
-                        transformed_url = show_url.replace("pixhost.to", "img2.pixhost.to").replace("/show/", "/images/")
+                        transformed_url = show_url.replace("pixhost.cc", "img2.pixhost.cc").replace("/show/", "/images/")
                         return transformed_url
                 else:
                     LOGGER.error(f"Pixhost upload failed with status {resp.status}: {await resp.text()}")
