@@ -100,7 +100,7 @@ async def upload_to_pixhost(thumb_path, filename=None):
     try:
         import aiohttp
         import aiofiles
-        url = "https://api.pixhost.to/images"
+        url = "https://api.pixhost.cc/images"
         data = aiohttp.FormData()
         data.add_field("content_type", "1")
         data.add_field("max_th_size", "420")
