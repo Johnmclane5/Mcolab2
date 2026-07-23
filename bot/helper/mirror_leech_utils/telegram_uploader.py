@@ -120,7 +120,7 @@ async def upload_to_pixhost(thumb_path, filename=None):
             async with session.post(url, data=data) as resp:
                 if resp.status == 200:
                     res_json = await resp.json()
-                    LOGGER.info(f"Pixhost upload response: {res_json}")
+                    #LOGGER.info(f"Pixhost upload response: {res_json}")
                     show_url = res_json.get("show_url") or res_json.get("th_url") or res_json.get("url")
                     if not show_url:
                         for value in res_json.values():
