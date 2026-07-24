@@ -69,6 +69,7 @@ class Config:
     WEB_PINCODE = False
     YT_DLP_OPTIONS = {}
     TMDB_API_KEY = ""
+    IMGBB_API_KEY = ""
     
     @classmethod
     def _convert(cls, key: str, value):

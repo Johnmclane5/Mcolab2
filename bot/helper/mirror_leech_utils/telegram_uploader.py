@@ -94,16 +94,18 @@ def extract_file_info(message, channel_id=None):
         )
     return file_info
 
-async def upload_to_pixhost(thumb_path, filename=None):
+async def upload_to_imgbb(thumb_path, filename=None):
     if not thumb_path or not ospath.exists(thumb_path):
+        return None
+    if not Config.IMGBB_API_KEY:
+        LOGGER.error("IMGBB_API_KEY is not configured!")
         return None
     try:
         import aiohttp
         import aiofiles
-        url = "https://api.pixhost.cc/images"
+        url = "https://api.imgbb.com/1/upload"
         data = aiohttp.FormData()
-        data.add_field("content_type", "1")
-        data.add_field("max_th_size", "420")
+        data.add_field("key", Config.IMGBB_API_KEY)
 
         async with aiofiles.open(thumb_path, "rb") as f:
             img_data = await f.read()
@@ -114,26 +116,21 @@ async def upload_to_pixhost(thumb_path, filename=None):
         else:
             upload_name = ospath.basename(thumb_path)
             
-        data.add_field("img", img_data, filename=upload_name)
+        data.add_field("image", img_data, filename=upload_name)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, data=data) as resp:
                 if resp.status == 200:
                     res_json = await resp.json()
-                    #LOGGER.info(f"Pixhost upload response: {res_json}")
-                    show_url = res_json.get("show_url") or res_json.get("th_url") or res_json.get("url")
-                    if not show_url:
-                        for value in res_json.values():
-                            if isinstance(value, str) and "pixhost.to" in value:
-                                show_url = value
-                                break
-                    if show_url:
-                        transformed_url = show_url.replace("pixhost.cc", "img2.pixhost.cc").replace("/show/", "/images/")
-                        return transformed_url
+                    if res_json.get("success"):
+                        direct_url = res_json.get("data", {}).get("url")
+                        return direct_url
+                    else:
+                        LOGGER.error(f"ImgBB upload API error: {res_json}")
                 else:
-                    LOGGER.error(f"Pixhost upload failed with status {resp.status}: {await resp.text()}")
+                    LOGGER.error(f"ImgBB upload failed with status {resp.status}: {await resp.text()}")
     except Exception as e:
-        LOGGER.error(f"Error uploading thumbnail to Pixhost: {e}")
+        LOGGER.error(f"Error uploading thumbnail to ImgBB: {e}")
     return None
 
 class TelegramUploader:
@@ -459,7 +456,7 @@ class TelegramUploader:
             tmdb_poster_url = None
             is_video, is_audio, is_image = await get_document_type(self._up_path)
 
-            if is_video and database.db is not None and database.pixhostdb is not None:
+            if is_video and database.db is not None and database.imgbbdb is not None:
                 if self._current_poster_url is None:
                     # Normalize the filename to check in DB
                     normalized_name = remove_extension(
@@ -467,17 +464,17 @@ class TelegramUploader:
                     )
                     if normalized_name:
                         self._current_file_name = normalized_name
-                        files_collection = database.pixhostdb["files"]
+                        files_collection = database.imgbbdb["files"]
                         existing_file = await files_collection.find_one({"file_name": normalized_name})
                         
                         # Get video thumbnail using get_video_thumbnail
                         duration = (await get_media_info(self._up_path))[0]
                         video_thumb = await get_video_thumbnail(self._up_path, duration)
                         
-                        # Upload video_thumb to Pixhost
+                        # Upload video_thumb to ImgBB
                         poster_url = None
                         if video_thumb:
-                            poster_url = await upload_to_pixhost(video_thumb, filename=file)
+                            poster_url = await upload_to_imgbb(video_thumb, filename=file)
                             if video_thumb != thumb and await aiopath.exists(video_thumb):
                                 await remove(video_thumb)
                         
@@ -619,10 +616,10 @@ class TelegramUploader:
 
             # Update poster_url in DB after copy_message
             try:
-                if is_video and database.db is not None and database.pixhostdb is not None and self._current_file_name:
+                if is_video and database.db is not None and database.imgbbdb is not None and self._current_file_name:
                     poster_url = self._current_poster_url if self._current_poster_url != "none" else None
                     if poster_url:
-                        files_collection = database.pixhostdb["files"]
+                        files_collection = database.imgbbdb["files"]
                         result = await files_collection.update_one(
                             {"file_name": self._current_file_name},
                             {"$set": {"poster_url": poster_url}}
