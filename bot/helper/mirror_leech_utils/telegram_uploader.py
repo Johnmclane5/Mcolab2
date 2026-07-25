@@ -96,10 +96,10 @@ def extract_file_info(message, channel_id=None):
 
 async def upload_to_imgbb(thumb_path, filename=None):
     if not thumb_path or not ospath.exists(thumb_path):
-        return None
+        return None, None
     if not Config.IMGBB_API_KEY:
         LOGGER.error("IMGBB_API_KEY is not configured!")
-        return None
+        return None, None
     try:
         import aiohttp
         import aiofiles
@@ -124,14 +124,15 @@ async def upload_to_imgbb(thumb_path, filename=None):
                     res_json = await resp.json()
                     if res_json.get("success"):
                         direct_url = res_json.get("data", {}).get("url")
-                        return direct_url
+                        delete_url = res_json.get("data", {}).get("delete_url")
+                        return direct_url, delete_url
                     else:
                         LOGGER.error(f"ImgBB upload API error: {res_json}")
                 else:
                     LOGGER.error(f"ImgBB upload failed with status {resp.status}: {await resp.text()}")
     except Exception as e:
         LOGGER.error(f"Error uploading thumbnail to ImgBB: {e}")
-    return None
+    return None, None
 
 class TelegramUploader:
     def __init__(self, listener, path):
@@ -156,6 +157,7 @@ class TelegramUploader:
         self._error = ""
         self._user_dump = ""
         self._current_poster_url = None
+        self._current_delete_url = None
         self._current_file_name = None
 
     async def get_custom_thumb(self, thumb):
@@ -339,6 +341,7 @@ class TelegramUploader:
                 self._error = ""
                 self._up_path = f_path = ospath.join(dirpath, file_)
                 self._current_poster_url = None
+                self._current_delete_url = None
                 self._current_file_name = None
                 if not await aiopath.exists(self._up_path):
                     if intervals["stopAll"]:
@@ -473,21 +476,28 @@ class TelegramUploader:
                         
                         # Upload video_thumb to ImgBB
                         poster_url = None
+                        delete_url = None
                         if video_thumb:
-                            poster_url = await upload_to_imgbb(video_thumb, filename=file)
+                            poster_url, delete_url = await upload_to_imgbb(video_thumb, filename=file)
                             if video_thumb != thumb and await aiopath.exists(video_thumb):
                                 await remove(video_thumb)
                         
                         self._current_poster_url = poster_url or "none"
+                        self._current_delete_url = delete_url or "none"
 
                         if existing_file:
-                            # Update existing record with the new poster url
+                            # Update existing record with the new poster url and delete_url
+                            update_fields = {}
                             if poster_url:
+                                update_fields["poster_url"] = poster_url
+                            if delete_url:
+                                update_fields["delete_url"] = delete_url
+                            if update_fields:
                                 await files_collection.update_one(
                                     {"_id": existing_file["_id"]},
-                                    {"$set": {"poster_url": poster_url}}
+                                    {"$set": update_fields}
                                 )
-                                LOGGER.info(f"Updated poster_url in DB for existing file: {normalized_name}")
+                                LOGGER.info(f"Updated poster_url and delete_url in DB for existing file: {normalized_name}")
                             return False
 
             if not is_image and thumb is None:
@@ -614,22 +624,28 @@ class TelegramUploader:
 
             await self._copy_message()
 
-            # Update poster_url in DB after copy_message
+            # Update poster_url and delete_url in DB after copy_message
             try:
                 if is_video and database.db is not None and database.imgbbdb is not None and self._current_file_name:
                     poster_url = self._current_poster_url if self._current_poster_url != "none" else None
+                    delete_url = self._current_delete_url if self._current_delete_url != "none" else None
+                    update_fields = {}
                     if poster_url:
+                        update_fields["poster_url"] = poster_url
+                    if delete_url:
+                        update_fields["delete_url"] = delete_url
+                    if update_fields:
                         files_collection = database.imgbbdb["files"]
                         result = await files_collection.update_one(
                             {"file_name": self._current_file_name},
-                            {"$set": {"poster_url": poster_url}}
+                            {"$set": update_fields}
                         )
                         if result.matched_count > 0:
-                            LOGGER.info(f"Updated poster_url in DB for file: {self._current_file_name}")
+                            LOGGER.info(f"Updated poster_url and delete_url in DB for file: {self._current_file_name}")
                         else:
                             LOGGER.info(f"No existing record found for file: {self._current_file_name}")
             except Exception as db_err:
-                LOGGER.error(f"Error updating poster_url in DB: {db_err}")
+                LOGGER.error(f"Error updating poster_url/delete_url in DB: {db_err}")
 
             if (
                 not self._listener.is_cancelled
