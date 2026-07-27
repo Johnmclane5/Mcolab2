@@ -497,7 +497,6 @@ class TelegramUploader:
                                     {"_id": existing_file["_id"]},
                                     {"$set": update_fields}
                                 )
-                                LOGGER.info(f"Updated poster_url and delete_url in DB for existing file: {normalized_name}")
                             return False
 
             if not is_image and thumb is None:
