@@ -642,7 +642,7 @@ class TelegramUploader:
                         if result.matched_count > 0:
                             pass
                         else:
-                            msg_to_extract = cpy_msg if cpy_msg is not None
+                            msg_to_extract = cpy_msg if cpy_msg is not None else None
                             if msg_to_extract is not None:
                                 file_info = extract_file_info(msg_to_extract)
                                 if file_info:
