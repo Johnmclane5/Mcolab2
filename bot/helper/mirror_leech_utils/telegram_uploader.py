@@ -640,7 +640,7 @@ class TelegramUploader:
                             {"$set": update_fields}
                         )
                         if result.matched_count > 0:
-                            LOGGER.info(f"Updated poster_url and delete_url in DB for file: {self._current_file_name}")
+                            pass
                         else:
                             msg_to_extract = cpy_msg if cpy_msg is not None
                             if msg_to_extract is not None:
@@ -653,7 +653,6 @@ class TelegramUploader:
                                     # Ensure we use self._current_file_name
                                     file_info["file_name"] = self._current_file_name
                                     await files_collection.insert_one(file_info)
-                                    LOGGER.info(f"Inserted new file into DB: {self._current_file_name}")
                             else:
                                 LOGGER.info(f"No existing record found and sent_msg is None for file: {self._current_file_name}")
             except Exception as db_err:
