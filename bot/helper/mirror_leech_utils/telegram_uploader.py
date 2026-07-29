@@ -642,7 +642,7 @@ class TelegramUploader:
                         if result.matched_count > 0:
                             LOGGER.info(f"Updated poster_url and delete_url in DB for file: {self._current_file_name}")
                         else:
-                            msg_to_extract = cpy_msg if cpy_msg is not None else self._sent_msg
+                            msg_to_extract = cpy_msg if cpy_msg is not None
                             if msg_to_extract is not None:
                                 file_info = extract_file_info(msg_to_extract)
                                 if file_info:
