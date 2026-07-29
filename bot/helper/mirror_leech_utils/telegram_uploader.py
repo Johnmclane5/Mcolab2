@@ -621,7 +621,7 @@ class TelegramUploader:
                     progress=self._upload_progress,
                 )
 
-            await self._copy_message()
+            cpy_msg = await self._copy_message()
 
             # Update poster_url and delete_url in DB after copy_message
             try:
@@ -642,7 +642,20 @@ class TelegramUploader:
                         if result.matched_count > 0:
                             LOGGER.info(f"Updated poster_url and delete_url in DB for file: {self._current_file_name}")
                         else:
-                            LOGGER.info(f"No existing record found for file: {self._current_file_name}")
+                            msg_to_extract = cpy_msg if cpy_msg is not None else self._sent_msg
+                            if msg_to_extract is not None:
+                                file_info = extract_file_info(msg_to_extract)
+                                if file_info:
+                                    if poster_url:
+                                        file_info["poster_url"] = poster_url
+                                    if delete_url:
+                                        file_info["delete_url"] = delete_url
+                                    # Ensure we use self._current_file_name
+                                    file_info["file_name"] = self._current_file_name
+                                    await files_collection.insert_one(file_info)
+                                    LOGGER.info(f"Inserted new file into DB: {self._current_file_name}")
+                            else:
+                                LOGGER.info(f"No existing record found and sent_msg is None for file: {self._current_file_name}")
             except Exception as db_err:
                 LOGGER.error(f"Error updating poster_url/delete_url in DB: {db_err}")
 
