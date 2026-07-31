@@ -105,6 +105,7 @@ class Mirror(TaskListener):
             "-ud": "",
             "-se": "",
             "-mv": "",
+            "-ms": False,
         }
 
         arg_parser(input_list[1:], args)
@@ -140,6 +141,7 @@ class Mirror(TaskListener):
         self.user_dump = args["-ud"]
         self.se_only = self.extract_subtitle == "only"
         self.merge = args["-mv"]
+        self.mux = args["-ms"]
 
         headers = args["-h"]
         if headers:
