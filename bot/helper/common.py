@@ -128,6 +128,7 @@ class TaskConfig:
             "FORUM",
         ]
         self.merge = ""
+        self.mux = False
 
     def get_token_path(self, dest):
         if dest.startswith("mtp:"):
@@ -847,6 +848,30 @@ class TaskConfig:
                 for inp in inputs.values():
                     if "/temp/" in inp and aiopath.exists(inp):
                         await remove(inp)
+        finally:
+            if checked:
+                cpu_eater_lock.release()
+
+    async def proceed_mux(self, dl_path, gid):
+        if await aiopath.isfile(dl_path):
+            return dl_path
+        checked = False
+        try:
+            ffmpeg = FFMpeg(self)
+            if self.is_cancelled:
+                return False
+            if not checked:
+                checked = True
+                async with task_dict_lock:
+                    task_dict[self.mid] = FFmpegStatus(self, ffmpeg, gid, "Mux")
+                self.progress = False
+                await cpu_eater_lock.acquire()
+                self.progress = True
+            LOGGER.info(f"Running subtitle muxing for: {dl_path}")
+            self.subsize = await get_path_size(dl_path)
+            self.subname = "Mux Subtitle"
+            res = await ffmpeg.mux_subtitles(dl_path)
+            return res or dl_path
         finally:
             if checked:
                 cpu_eater_lock.release()

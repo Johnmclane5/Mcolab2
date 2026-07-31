@@ -246,7 +246,24 @@ class TaskListener(TaskConfig):
             self.proceed_count = 0
             self.progress = True
 
-
+        if self.mux:
+            up_path = await self.proceed_mux(
+                up_path,
+                gid
+            )
+            if self.is_cancelled:
+                return
+            self.is_file = await aiopath.isfile(up_path)
+            if "/" in up_path:
+                up_dir, self.name = up_path.rsplit("/", 1)
+            else:
+                up_dir, self.name = up_path, up_path
+            self.size = await get_path_size(up_dir)
+            self.subname = ""
+            self.subsize = 0
+            self.files_to_proceed = []
+            self.proceed_count = 0
+            self.progress = True
 
         if self.name_sub:
             up_path = await self.substitute(up_path)

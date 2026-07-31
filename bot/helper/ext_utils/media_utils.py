@@ -12,7 +12,7 @@ from asyncio.subprocess import PIPE
 from os import path as ospath
 from re import search as re_search, escape
 from time import gmtime, strftime, time
-from aioshutil import rmtree
+from aioshutil import rmtree, move
 
 from ... import LOGGER, DOWNLOAD_DIR, threads, cores
 from .bot_utils import cmd_exec, sync_to_async
@@ -822,7 +822,7 @@ class FFMpeg:
                 await remove(output_path)
             return False
 
-    async def merge_videos(self, folder_path, output_path):
+    async def mux_subtitles(self, folder_path):
         self.clear()
         video_files = []
         for root, _, files in await sync_to_async(os.walk, folder_path):
@@ -853,10 +853,16 @@ class FFMpeg:
 
             if srt_files:
                 self._total_time = (await get_media_info(video))[0]
-                res = await self._mux_video(video, srt_files, output_path)
+                video_dir, video_name = ospath.split(video)
+                base_name, _ = ospath.splitext(video_name)
+                output_path = ospath.join(video_dir, f"{base_name}.mkv")
+                temp_output_path = ospath.join(video_dir, f"{base_name}_muxed.mkv")
+
+                res = await self._mux_video(video, srt_files, temp_output_path)
                 if res:
                     try:
                         await remove(video)
+                        await move(temp_output_path, output_path)
                         for srt in srt_files:
                             await remove(srt)
                         for folder in srt_folders:
@@ -867,8 +873,81 @@ class FFMpeg:
                     return output_path
             return video
 
+        else:
+            dir_map = {}
+            for root, dirs, _ in await sync_to_async(os.walk, folder_path):
+                for d in dirs:
+                    if d not in dir_map:
+                        dir_map[d] = []
+                    dir_map[d].append(ospath.join(root, d))
+
+            to_mux = []
+            for video in video_files:
+                v_name = ospath.splitext(ospath.basename(video))[0]
+                if v_name in dir_map:
+                    srt_files = []
+                    srt_folders = []
+                    for srt_folder in dir_map[v_name]:
+                        srts = []
+                        for sroot, _, sfiles in await sync_to_async(os.walk, srt_folder):
+                            for sf in sfiles:
+                                if sf.lower().endswith(".srt"):
+                                    srts.append(ospath.join(sroot, sf))
+                        if srts:
+                            srt_files.extend(srts)
+                            srt_folders.append(srt_folder)
+                    if srt_files:
+                        to_mux.append((video, srt_files, srt_folders))
+
+            if not to_mux:
+                return folder_path
+
+            durations = await gather(*(get_media_info(video) for video, _, _ in to_mux))
+            self._total_time = sum(d[0] for d in durations)
+
+            for video, srt_files, folders in to_mux:
+                if self._listener.is_cancelled:
+                    return False
+                video_dir, video_name = ospath.split(video)
+                base_name, _ = ospath.splitext(video_name)
+                output_path = ospath.join(video_dir, f"{base_name}.mkv")
+                temp_output_path = ospath.join(video_dir, f"{base_name}_muxed.mkv")
+                duration = (await get_media_info(video))[0]
+
+                res = await self._mux_video(video, srt_files, temp_output_path)
+                if res:
+                    self._last_processed_time += duration
+                    self._last_processed_bytes += await aiopath.getsize(temp_output_path)
+                    try:
+                        await remove(video)
+                        await move(temp_output_path, output_path)
+                        for srt in srt_files:
+                            await remove(srt)
+                        for folder in folders:
+                            await rmtree(folder, ignore_errors=True)
+                    except:
+                        pass
+
+            return folder_path
+
+    async def merge_videos(self, folder_path, output_path):
+        self.clear()
+        video_files = []
+        for root, _, files in await sync_to_async(os.walk, folder_path):
+            for f in files:
+                if f.lower().endswith(tuple(VIDEO_SUFFIXES)):
+                    video_files.append(ospath.join(root, f))
+
+        if not video_files:
+            LOGGER.error(f"No video files found in the folder: {folder_path}")
+            return False
+
+        video_files.sort()
+
+        if len(video_files) == 1:
+            return video_files[0]
+
         mkv_files = [f for f in video_files if f.lower().endswith(".mkv")]
-        mp4_files = [f for f in video_files if f.lower().endswith(".mp4")]
 
         if mkv_files:
             durations = await gather(*(get_media_info(video) for video in mkv_files))
@@ -946,63 +1025,7 @@ class FFMpeg:
                     await remove(output_path)
                 return False
 
-        elif mp4_files:
-            to_mux = []
-            if len(mp4_files) == 1:
-                # Handled above
-                pass
-            else:
-                dir_map = {}
-                for root, dirs, _ in await sync_to_async(os.walk, folder_path):
-                    for d in dirs:
-                        if d not in dir_map:
-                            dir_map[d] = []
-                        dir_map[d].append(ospath.join(root, d))
-
-                for video in mp4_files:
-                    v_name = ospath.splitext(ospath.basename(video))[0]
-                    if v_name in dir_map:
-                        srt_files = []
-                        srt_folders = []
-                        for srt_folder in dir_map[v_name]:
-                            srts = [
-                                ospath.join(srt_folder, f)
-                                for f in await listdir(srt_folder)
-                                if f.lower().endswith(".srt")
-                            ]
-                            if srts:
-                                srt_files.extend(srts)
-                                srt_folders.append(srt_folder)
-                        if srt_files:
-                            to_mux.append((video, srt_files, srt_folders))
-
-            if not to_mux:
-                return folder_path
-
-            durations = await gather(*(get_media_info(video) for video, _, _ in to_mux))
-            self._total_time = sum(d[0] for d in durations)
-
-            for video, srt_files, folders in to_mux:
-                if self._listener.is_cancelled:
-                    return False
-                out_path = f"{ospath.splitext(video)[0]}.mkv"
-                duration = (await get_media_info(video))[0]
-                res = await self._mux_video(video, srt_files, out_path)
-                if res:
-                    self._last_processed_time += duration
-                    self._last_processed_bytes += await aiopath.getsize(out_path)
-                    try:
-                        await remove(video)
-                        for folder in folders:
-                            await rmtree(folder, ignore_errors=True)
-                    except:
-                        pass
-                if len(mp4_files) == 1 and res:
-                    return out_path
-
-            return folder_path
-
-        return False
+        return folder_path
 
     async def extract_subtitles(self, video_file):
         self.clear()
