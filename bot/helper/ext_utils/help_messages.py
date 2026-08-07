@@ -390,6 +390,7 @@ Here I will explain how to use mltb.* which is reference to files you want to wo
 4. Fourth cmd: the input is mltb.audio so this cmd will work on all audios and the output is mltb.mp3 so the output extension is mp3.
 5. FFmpeg Variables in last cmd which is metadata ({title}, {title2}, etc...), you can edit them in usetting
 6. Telegram link for small size inputs like photo to set watermark.""",
+    "BUZZHEAVIER_TOKEN": "Send your Buzzheavier Account ID (Token). Timeout: 60 sec",
 }
 
 

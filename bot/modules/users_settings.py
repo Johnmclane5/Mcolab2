@@ -299,6 +299,14 @@ Stop Duplicate is <b>{sd_msg}</b>"""
             f"userset {user_id} tog USER_TOKENS {'f' if user_tokens else 't'}",
         )
 
+        if user_dict.get("BUZZHEAVIER_TOKEN", False):
+            bh_token = user_dict["BUZZHEAVIER_TOKEN"]
+        elif Config.BUZZHEAVIER_TOKEN:
+            bh_token = Config.BUZZHEAVIER_TOKEN
+        else:
+            bh_token = "None"
+        buttons.data_button("Buzzheavier Token", f"userset {user_id} menu BUZZHEAVIER_TOKEN")
+
         buttons.data_button(
             "Excluded Extensions", f"userset {user_id} menu EXCLUDED_EXTENSIONS"
         )
@@ -349,6 +357,7 @@ Stop Duplicate is <b>{sd_msg}</b>"""
 Default Package is <b>{du}</b>
 Use <b>{tr}</b> token/config
 Upload Paths is <code>{upload_paths}</code>
+Buzzheavier Token is <code>{bh_token}</code>
 
 Name substitution is <code>{ns_msg}</code>
 
