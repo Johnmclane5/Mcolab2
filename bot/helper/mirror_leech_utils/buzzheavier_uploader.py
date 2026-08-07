@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 import aiofiles
+import re
 from ... import LOGGER, task_dict_lock, task_dict
 from ...core.config_manager import Config
 from ..telegram_helper.message_utils import send_message
@@ -105,13 +106,22 @@ class BuzzheavierUploader:
                 res = await client.post(url, headers=headers, json=payload)
                 LOGGER.info(f"Buzzheavier POST /api/fs/{parent_id}: status_code={res.status_code}, response={res.text}")
                 if res.status_code in [200, 201]:
-                    data = res.json()
                     folder_id = None
-                    if isinstance(data, dict):
-                        if "data" in data and isinstance(data["data"], dict):
-                            folder_id = data["data"].get("id")
-                        if not folder_id:
-                            folder_id = data.get("id")
+                    try:
+                        data = res.json()
+                        if isinstance(data, dict):
+                            if "data" in data and isinstance(data["data"], dict):
+                                folder_id = data["data"].get("id")
+                            if not folder_id:
+                                folder_id = data.get("id")
+                    except Exception as json_err:
+                        LOGGER.error(f"JSON parsing error: {json_err}")
+
+                    if not folder_id:
+                        match = re.search(r'"id"\s*:\s*"([^"]+)"', res.text)
+                        if match:
+                            folder_id = match.group(1)
+
                     return folder_id
                 else:
                     LOGGER.error(f"Failed to create folder {name}: status={res.status_code}, response={res.text}")
@@ -142,13 +152,22 @@ class BuzzheavierUploader:
                 res = await client.put(url, headers=headers, content=progress_sender)
                 LOGGER.info(f"Buzzheavier PUT response: status_code={res.status_code}, response={res.text}")
                 if res.status_code in [200, 201]:
-                    data = res.json()
                     file_id = None
-                    if isinstance(data, dict):
-                        if "data" in data and isinstance(data["data"], dict):
-                            file_id = data["data"].get("id")
-                        if not file_id:
-                            file_id = data.get("id")
+                    try:
+                        data = res.json()
+                        if isinstance(data, dict):
+                            if "data" in data and isinstance(data["data"], dict):
+                                file_id = data["data"].get("id")
+                            if not file_id:
+                                file_id = data.get("id")
+                    except Exception as json_err:
+                        LOGGER.error(f"JSON parsing error: {json_err}")
+
+                    if not file_id:
+                        match = re.search(r'"id"\s*:\s*"([^"]+)"', res.text)
+                        if match:
+                            file_id = match.group(1)
+
                     if file_id:
                         return f"https://buzzheavier.com/{file_id}"
                     else:
