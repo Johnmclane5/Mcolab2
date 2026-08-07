@@ -37,7 +37,7 @@ class BuzzheavierUploader:
         self.path = path
         self.processed_bytes = 0
         self.total_size = listener.size
-        self.token = Config.BUZZHEAVIER_TOKEN or ""
+        self.token = listener.user_dict.get("BUZZHEAVIER_TOKEN", "") or Config.BUZZHEAVIER_TOKEN or ""
         self._start_time = time.time()
         self.uploaded_files = {}  # maps filename -> link
 
