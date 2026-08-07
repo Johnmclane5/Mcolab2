@@ -345,6 +345,18 @@ class TaskListener(TaskConfig):
                 tg.upload(),
             )
             del tg
+        elif self.up_dest == "bh":
+            LOGGER.info(f"Buzzheavier Upload Name: {self.name}")
+            from ..mirror_leech_utils.buzzheavier_uploader import BuzzheavierUploader
+            from ..mirror_leech_utils.status_utils.buzzheavier_status import BuzzheavierStatus
+            bh = BuzzheavierUploader(self, up_path)
+            async with task_dict_lock:
+                task_dict[self.mid] = BuzzheavierStatus(self, bh, gid, "up")
+            await gather(
+                update_status_message(self.message.chat.id),
+                bh.upload(),
+            )
+            del bh
         elif is_gdrive_id(self.up_dest):
             LOGGER.info(f"Gdrive Upload Name: {self.name}")
             drive = GoogleDriveUpload(self, up_path)
