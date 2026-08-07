@@ -274,9 +274,13 @@ class TaskConfig:
                 self.up_dest = self.user_dict.get("RCLONE_PATH") or Config.RCLONE_PATH
             elif (not self.up_dest and default_upload == "gd") or self.up_dest == "gd":
                 self.up_dest = self.user_dict.get("GDRIVE_ID") or Config.GDRIVE_ID
+            elif (not self.up_dest and default_upload == "bh") or self.up_dest == "bh":
+                self.up_dest = "bh"
             if not self.up_dest:
                 raise ValueError("No Upload Destination!")
-            if self.up_dest not in ["rcl", "gdl"]:
+            if self.up_dest == "bh":
+                pass
+            elif self.up_dest not in ["rcl", "gdl"]:
                 if is_gdrive_id(self.up_dest):
                     if not self.up_dest.startswith(
                         ("mtp:", "tp:", "sa:")

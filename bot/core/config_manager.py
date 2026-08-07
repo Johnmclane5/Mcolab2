@@ -11,6 +11,7 @@ class Config:
     BASE_URL = ""
     BASE_URL_PORT = 80
     BOT_TOKEN = ""
+    BUZZHEAVIER_TOKEN = ""
     CMD_SUFFIX = ""
     DATABASE_URL = ""
     DEFAULT_UPLOAD = "rc"
@@ -150,7 +151,7 @@ class Config:
         if isinstance(converted_value, str):
             converted_value = converted_value.strip()
 
-        if attr == "DEFAULT_UPLOAD" and converted_value != "gd":
+        if attr == "DEFAULT_UPLOAD" and converted_value not in ["gd", "bh"]:
             return "rc"
 
         if attr in {

@@ -273,10 +273,17 @@ Stop Duplicate is <b>{sd_msg}</b>"""
             default_upload = user_dict["DEFAULT_UPLOAD"]
         elif "DEFAULT_UPLOAD" not in user_dict:
             default_upload = Config.DEFAULT_UPLOAD
-        du = "Gdrive API" if default_upload == "gd" else "Rclone"
-        dur = "Gdrive API" if default_upload != "gd" else "Rclone"
+        if default_upload == "gd":
+            next_du = "rc"
+            next_du_name = "Rclone"
+        elif default_upload == "rc":
+            next_du = "bh"
+            next_du_name = "Buzzheavier"
+        else:
+            next_du = "gd"
+            next_du_name = "Gdrive API"
         buttons.data_button(
-            f"Upload using {dur}", f"userset {user_id} {default_upload}"
+            f"Upload using {next_du_name}", f"userset {user_id} {default_upload}"
         )
 
         user_tokens = user_dict.get("USER_TOKENS", False)
@@ -744,9 +751,14 @@ async def edit_user_settings(client, query):
             with BytesIO(msg_ecd) as ofile:
                 ofile.name = "users_settings.txt"
                 await send_file(message, ofile)
-    elif data[2] in ["gd", "rc"]:
+    elif data[2] in ["gd", "rc", "bh"]:
         await query.answer()
-        du = "rc" if data[2] == "gd" else "gd"
+        if data[2] == "gd":
+            du = "rc"
+        elif data[2] == "rc":
+            du = "bh"
+        else:
+            du = "gd"
         update_user_ldata(user_id, "DEFAULT_UPLOAD", du)
         await update_user_settings(query)
         await database.update_user_data(user_id)
