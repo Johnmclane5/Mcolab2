@@ -53,36 +53,39 @@ class BuzzheavierUploader:
             return None
         headers = {"Authorization": f"Bearer {self.token}"}
         async with httpx.AsyncClient() as client:
-            # 1. Try GET /api/account
-            try:
-                res = await client.get("https://buzzheavier.com/api/account", headers=headers)
-                if res.status_code == 200:
-                    data = res.json()
-                    for key in ["rootDirectoryId", "rootFolderId", "root_id", "root", "id"]:
-                        if key in data:
-                            return data[key]
-                        if isinstance(data.get("data"), dict):
-                            for subkey in ["rootDirectoryId", "rootFolderId", "root_id", "root", "id"]:
-                                if subkey in data["data"]:
-                                    return data["data"][subkey]
-            except Exception as e:
-                LOGGER.error(f"Error fetching account info: {e}")
-
-            # 2. Try GET /api/fs
+            # 1. Try GET /api/fs
             try:
                 res = await client.get("https://buzzheavier.com/api/fs", headers=headers)
+                LOGGER.info(f"Buzzheavier /api/fs: status_code={res.status_code}, response={res.text}")
                 if res.status_code == 200:
                     data = res.json()
                     if isinstance(data, dict):
-                        for key in ["id", "root", "parentId", "parent_id"]:
+                        for key in ["id", "root", "root_id", "rootFolderId", "rootDirectoryId", "parentId", "parent_id"]:
                             if key in data:
                                 return data[key]
-                        if isinstance(data.get("data"), dict):
-                            for subkey in ["id", "root", "parentId", "parent_id"]:
-                                if subkey in data["data"]:
-                                    return data["data"][subkey]
+                        if "directory" in data and isinstance(data["directory"], dict):
+                            for key in ["id", "parentId", "parent_id"]:
+                                if key in data["directory"]:
+                                    return data["directory"][key]
             except Exception as e:
                 LOGGER.error(f"Error fetching fs info: {e}")
+
+            # 2. Try GET /api/account
+            try:
+                res = await client.get("https://buzzheavier.com/api/account", headers=headers)
+                LOGGER.info(f"Buzzheavier /api/account: status_code={res.status_code}, response={res.text}")
+                if res.status_code == 200:
+                    data = res.json()
+                    if isinstance(data, dict):
+                        for key in ["rootDirectoryId", "rootFolderId", "root_id", "root", "id"]:
+                            if key in data:
+                                return data[key]
+                            if isinstance(data.get("data"), dict):
+                                for subkey in ["rootDirectoryId", "rootFolderId", "root_id", "root", "id"]:
+                                    if subkey in data["data"]:
+                                        return data["data"][subkey]
+            except Exception as e:
+                LOGGER.error(f"Error fetching account info: {e}")
         return None
 
     async def create_folder(self, name, parent_id=None):
@@ -100,6 +103,7 @@ class BuzzheavierUploader:
         async with httpx.AsyncClient() as client:
             try:
                 res = await client.post(url, headers=headers, json=payload)
+                LOGGER.info(f"Buzzheavier POST /api/fs/{parent_id}: status_code={res.status_code}, response={res.text}")
                 if res.status_code in [200, 201]:
                     data = res.json()
                     folder_id = None
@@ -120,7 +124,7 @@ class BuzzheavierUploader:
         file_size = os.path.getsize(file_path)
 
         if self.token:
-            p_id = parent_id or self.token
+            p_id = parent_id or await self._get_root_id() or self.token
             url = f"https://w.buzzheavier.com/{p_id}/{filename}"
         else:
             url = f"https://w.buzzheavier.com/{filename}"
@@ -134,7 +138,9 @@ class BuzzheavierUploader:
 
         async with httpx.AsyncClient(timeout=None) as client:
             try:
+                LOGGER.info(f"Uploading file {filename} to {url} (Authenticated: {bool(self.token)})")
                 res = await client.put(url, headers=headers, content=progress_sender)
+                LOGGER.info(f"Buzzheavier PUT response: status_code={res.status_code}, response={res.text}")
                 if res.status_code in [200, 201]:
                     data = res.json()
                     file_id = None
@@ -157,7 +163,7 @@ class BuzzheavierUploader:
         dir_name = os.path.basename(dir_path)
 
         if self.token:
-            p_id = parent_id or self.token
+            p_id = parent_id or await self._get_root_id() or self.token
             current_folder_id = await self.create_folder(dir_name, p_id)
             if not current_folder_id:
                 current_folder_id = p_id
