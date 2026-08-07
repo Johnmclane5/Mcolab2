@@ -6,7 +6,6 @@ from ... import LOGGER, task_dict_lock, task_dict
 from ...core.config_manager import Config
 from ..telegram_helper.message_utils import send_message
 from ..ext_utils.files_utils import count_files_and_folders
-from ..ext_utils.status_utils import get_readable_file_size
 
 
 class ProgressSender:
