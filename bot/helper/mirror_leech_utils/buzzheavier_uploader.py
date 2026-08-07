@@ -89,7 +89,7 @@ class BuzzheavierUploader:
         if not self.token:
             return None
         if parent_id is None:
-            parent_id = await self._get_root_id()
+            parent_id = await self._get_root_id() or self.token
 
         url = f"https://buzzheavier.com/api/fs/{parent_id}" if parent_id else "https://buzzheavier.com/api/fs"
         headers = {
@@ -119,8 +119,9 @@ class BuzzheavierUploader:
         filename = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
 
-        if self.token and parent_id:
-            url = f"https://w.buzzheavier.com/{parent_id}/{filename}"
+        if self.token:
+            p_id = parent_id or self.token
+            url = f"https://w.buzzheavier.com/{p_id}/{filename}"
         else:
             url = f"https://w.buzzheavier.com/{filename}"
 
@@ -156,9 +157,10 @@ class BuzzheavierUploader:
         dir_name = os.path.basename(dir_path)
 
         if self.token:
-            current_folder_id = await self.create_folder(dir_name, parent_id)
+            p_id = parent_id or self.token
+            current_folder_id = await self.create_folder(dir_name, p_id)
             if not current_folder_id:
-                current_folder_id = parent_id
+                current_folder_id = p_id
         else:
             current_folder_id = None
 
@@ -187,7 +189,7 @@ class BuzzheavierUploader:
 
                 if self.token:
                     # Authenticated Folder Structure
-                    root_parent = await self._get_root_id()
+                    root_parent = await self._get_root_id() or self.token
                     folder_name = os.path.basename(self.path)
                     top_folder_id = await self.create_folder(folder_name, root_parent)
 
