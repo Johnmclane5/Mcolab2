@@ -54,39 +54,20 @@ class BuzzheavierUploader:
             return None
         headers = {"Authorization": f"Bearer {self.token}"}
         async with httpx.AsyncClient() as client:
-            # 1. Try GET /api/fs
+            # Try GET /api/fs to fetch the root folder ID
             try:
                 res = await client.get("https://buzzheavier.com/api/fs", headers=headers)
                 LOGGER.info(f"Buzzheavier /api/fs: status_code={res.status_code}, response={res.text}")
                 if res.status_code == 200:
                     data = res.json()
                     if isinstance(data, dict):
-                        for key in ["id", "root", "root_id", "rootFolderId", "rootDirectoryId", "parentId", "parent_id"]:
-                            if key in data:
-                                return data[key]
-                        if "directory" in data and isinstance(data["directory"], dict):
-                            for key in ["id", "parentId", "parent_id"]:
-                                if key in data["directory"]:
-                                    return data["directory"][key]
+                        if "data" in data and isinstance(data["data"], dict):
+                            if "id" in data["data"]:
+                                return data["data"]["id"]
+                        if "id" in data:
+                            return data["id"]
             except Exception as e:
                 LOGGER.error(f"Error fetching fs info: {e}")
-
-            # 2. Try GET /api/account
-            try:
-                res = await client.get("https://buzzheavier.com/api/account", headers=headers)
-                LOGGER.info(f"Buzzheavier /api/account: status_code={res.status_code}, response={res.text}")
-                if res.status_code == 200:
-                    data = res.json()
-                    if isinstance(data, dict):
-                        for key in ["rootDirectoryId", "rootFolderId", "root_id", "root", "id"]:
-                            if key in data:
-                                return data[key]
-                            if isinstance(data.get("data"), dict):
-                                for subkey in ["rootDirectoryId", "rootFolderId", "root_id", "root", "id"]:
-                                    if subkey in data["data"]:
-                                        return data["data"][subkey]
-            except Exception as e:
-                LOGGER.error(f"Error fetching account info: {e}")
         return None
 
     async def create_folder(self, name, parent_id=None):
