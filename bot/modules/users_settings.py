@@ -55,6 +55,8 @@ async def get_user_settings(from_user, stype="main"):
     rclone_conf = f"rclone/{user_id}.conf"
     token_pickle = f"tokens/{user_id}.pickle"
     user_dict = user_data.get(user_id, {})
+    du = "Rclone"
+    tr = "OWNER"
 
     if stype == "leech":
         thumbpath = f"thumbnails/{user_id}.jpg"
@@ -274,12 +276,15 @@ Stop Duplicate is <b>{sd_msg}</b>"""
         elif "DEFAULT_UPLOAD" not in user_dict:
             default_upload = Config.DEFAULT_UPLOAD
         if default_upload == "gd":
+            du = "Gdrive API"
             next_du = "rc"
             next_du_name = "Rclone"
         elif default_upload == "rc":
+            du = "Rclone"
             next_du = "bh"
             next_du_name = "Buzzheavier"
         else:
+            du = "Buzzheavier"
             next_du = "gd"
             next_du_name = "Gdrive API"
         buttons.data_button(
