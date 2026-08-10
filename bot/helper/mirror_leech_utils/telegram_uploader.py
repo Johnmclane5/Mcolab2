@@ -616,33 +616,34 @@ class TelegramUploader:
 
             cpy_msg = await self._copy_message()
 
-            # Update poster_url in DB after copy_message
+            # Wait 3s after copy_message, then update image url in DB
             try:
                 if is_video and database.db is not None and database.imgbbdb is not None and self._current_file_name:
+                    await sleep(3)
                     poster_url = self._current_poster_url if self._current_poster_url != "none" else None
-                    update_fields = {}
-                    if poster_url:
-                        update_fields["poster_url"] = poster_url
-                    if update_fields:
-                        files_collection = database.imgbbdb["files"]
-                        result = await files_collection.update_one(
-                            {"file_name": self._current_file_name},
-                            {"$set": update_fields}
-                        )
-                        if result.matched_count > 0:
-                            pass
-                        else:
-                            msg_to_extract = cpy_msg if cpy_msg is not None else None
-                            if msg_to_extract is not None:
-                                file_info = extract_file_info(msg_to_extract)
-                                if file_info:
-                                    if poster_url:
-                                        file_info["poster_url"] = poster_url
-                                    # Ensure we use self._current_file_name
-                                    file_info["file_name"] = self._current_file_name
-                                    await files_collection.insert_one(file_info)
-                            else:
-                                LOGGER.info(f"No existing record found and sent_msg is None for file: {self._current_file_name}")
+                    files_collection = database.imgbbdb["files"]
+                    existing_file = await files_collection.find_one({"file_name": self._current_file_name})
+
+                    if existing_file:
+                        # Update existing record with the new poster url, do not insert
+                        update_fields = {}
+                        if poster_url:
+                            update_fields["poster_url"] = poster_url
+                        if update_fields:
+                            await files_collection.update_one(
+                                {"_id": existing_file["_id"]},
+                                {"$set": update_fields}
+                            )
+                    else:
+                        # Send image URL as bot message
+                        if poster_url:
+                            try:
+                                await TgClient.bot.send_message(
+                                    chat_id=self._sent_msg.chat.id,
+                                    text=poster_url
+                                )
+                            except Exception as e:
+                                LOGGER.error(f"Failed to send image URL as bot message: {e}")
             except Exception as db_err:
                 LOGGER.error(f"Error updating poster_url in DB: {db_err}")
 
