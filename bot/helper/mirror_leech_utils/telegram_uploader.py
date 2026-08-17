@@ -124,7 +124,8 @@ async def upload_to_imgbb(thumb_path, filename=None):
                     res_json = await resp.json()
                     if res_json.get("success"):
                         direct_url = res_json.get("data", {}).get("url")
-                        return direct_url
+                        delete_url = res_json.get("data", {}).get("delete_url")
+                        return direct_url, delete_url
                     else:
                         LOGGER.error(f"ImgBB upload API error: {res_json}")
                 else:
@@ -156,6 +157,7 @@ class TelegramUploader:
         self._error = ""
         self._user_dump = ""
         self._current_poster_url = None
+        self._current_delete_url = None
         self._current_file_name = None
 
     async def get_custom_thumb(self, thumb):
@@ -339,6 +341,7 @@ class TelegramUploader:
                 self._error = ""
                 self._up_path = f_path = ospath.join(dirpath, file_)
                 self._current_poster_url = None
+                self._current_delete_url = None
                 self._current_file_name = None
                 if not await aiopath.exists(self._up_path):
                     if intervals["stopAll"]:
@@ -473,18 +476,22 @@ class TelegramUploader:
                         
                         # Upload video_thumb to ImgBB
                         poster_url = None
+                        delete_url = None
                         if video_thumb:
-                            poster_url = await upload_to_imgbb(video_thumb, filename=file)
+                            poster_url, delete_url = await upload_to_imgbb(video_thumb, filename=file)
                             if video_thumb != thumb and await aiopath.exists(video_thumb):
                                 await remove(video_thumb)
                         
                         self._current_poster_url = poster_url or "none"
+                        self._current_delete_url = delete_url or "none"
 
                         if existing_file:
-                            # Update existing record with the new poster url
+                            # Update existing record with the new poster url and delete url
                             update_fields = {}
                             if poster_url:
                                 update_fields["poster_url"] = poster_url
+                            if delete_url:
+                                update_fields["delete_url"] = delete_url
                             if update_fields:
                                 await files_collection.update_one(
                                     {"_id": existing_file["_id"]},
@@ -621,14 +628,17 @@ class TelegramUploader:
                 if is_video and database.db is not None and database.imgbbdb is not None and self._current_file_name:
                     await sleep(3)
                     poster_url = self._current_poster_url if self._current_poster_url != "none" else None
+                    delete_url = self._current_delete_url if self._current_delete_url != "none" else None
                     files_collection = database.imgbbdb["files"]
                     existing_file = await files_collection.find_one({"file_name": self._current_file_name})
 
                     if existing_file:
-                        # Update existing record with the new poster url, do not insert
+                        # Update existing record with the new poster url and delete url, do not insert
                         update_fields = {}
                         if poster_url:
                             update_fields["poster_url"] = poster_url
+                        if delete_url:
+                            update_fields["delete_url"] = delete_url
                         if update_fields:
                             await files_collection.update_one(
                                 {"_id": existing_file["_id"]},
