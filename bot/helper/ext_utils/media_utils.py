@@ -232,7 +232,7 @@ async def get_video_thumbnail(video_file, duration):
         "-vf",
         "thumbnail",
         "-q:v",
-        "1",
+        "2",
         "-frames:v",
         "1",
         "-threads",
