@@ -12,6 +12,7 @@ from asyncio.subprocess import PIPE
 from os import path as ospath
 from re import search as re_search, escape
 from time import gmtime, strftime, time
+from json import loads as json_loads
 from aioshutil import rmtree, move
 
 from ... import LOGGER, DOWNLOAD_DIR, threads, cores
@@ -517,6 +518,126 @@ class FFMpeg:
                 f"{stderr}. Something went wrong while converting video, mostly file need specific codec. Path: {video_file}"
             )
         return False
+
+    async def transcode_audio_to_aac(self, video_file):
+        self.clear()
+        self._total_time = (await get_media_info(video_file))[0]
+        try:
+            result = await cmd_exec(
+                [
+                    "ffprobe",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-print_format",
+                    "json",
+                    "-show_streams",
+                    video_file,
+                ]
+            )
+        except Exception as e:
+            LOGGER.error(f"transcode_audio_to_aac ffprobe error: {e} - File: {video_file}")
+            return False
+
+        if not result[0] or result[2] != 0:
+            LOGGER.error(f"transcode_audio_to_aac ffprobe failed: {result[1]} - File: {video_file}")
+            return False
+
+        try:
+            streams = json_loads(result[0]).get("streams", [])
+        except Exception as e:
+            LOGGER.error(f"transcode_audio_to_aac json_loads error: {e} - File: {video_file}")
+            return False
+
+        has_audio = False
+        non_aac_audio = False
+        cmd_maps = []
+
+        audio_idx = 0
+        for stream in streams:
+            codec_type = stream.get("codec_type")
+            codec_name = stream.get("codec_name", "").lower()
+            if codec_type == "audio":
+                has_audio = True
+                if codec_name != "aac":
+                    non_aac_audio = True
+                    cmd_maps.extend([f"-c:a:{audio_idx}", "aac"])
+                else:
+                    cmd_maps.extend([f"-c:a:{audio_idx}", "copy"])
+                audio_idx += 1
+
+        if not has_audio or not non_aac_audio:
+            LOGGER.info(f"No non-AAC audio stream found to transcode in: {video_file}")
+            return video_file
+
+        base_name, ext = ospath.splitext(video_file)
+        temp_output = f"{base_name}_transcoded{ext}"
+
+        cmd = [
+            "taskset",
+            "-c",
+            f"{cores}",
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-progress",
+            "pipe:1",
+            "-i",
+            video_file,
+            "-map",
+            "0",
+            "-c:v",
+            "copy",
+            "-c:s",
+            "copy",
+            "-c:t",
+            "copy",
+        ] + cmd_maps + [
+            "-threads",
+            f"{threads}",
+            temp_output,
+        ]
+
+        if self._listener.is_cancelled:
+            return False
+
+        self._listener.subproc = await create_subprocess_exec(
+            *cmd, stdout=PIPE, stderr=PIPE
+        )
+        await self._ffmpeg_progress()
+        _, stderr = await self._listener.subproc.communicate()
+        code = self._listener.subproc.returncode
+
+        if self._listener.is_cancelled:
+            if await aiopath.exists(temp_output):
+                await remove(temp_output)
+            return False
+
+        if code == 0:
+            try:
+                await remove(video_file)
+                await move(temp_output, video_file)
+            except Exception as e:
+                LOGGER.error(f"Error replacing transcoded file {video_file}: {e}")
+                if await aiopath.exists(temp_output):
+                    await remove(temp_output)
+                return False
+            return video_file
+        elif code == -9:
+            self._listener.is_cancelled = True
+            if await aiopath.exists(temp_output):
+                await remove(temp_output)
+            return False
+        else:
+            try:
+                stderr = stderr.decode().strip()
+            except Exception:
+                stderr = "Unable to decode error!"
+            LOGGER.error(f"Error transcoding audio in video {video_file}: {stderr}")
+            if await aiopath.exists(temp_output):
+                await remove(temp_output)
+            return False
 
     async def convert_audio(self, audio_file, ext):
         self.clear()
