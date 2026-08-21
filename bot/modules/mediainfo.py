@@ -1,6 +1,6 @@
 from html import escape
 from aiofiles import open as aiopen
-from aiofiles.os import remove, path as aiopath
+from aiofiles.os import remove, path as aiopath, makedirs
 from os import path as ospath
 
 from .. import LOGGER, DOWNLOAD_DIR
@@ -12,7 +12,7 @@ from ..helper.telegram_helper.message_utils import send_message, get_tg_link_mes
 
 
 async def _download_header_bytes(tg_client, reply_to, file_path, limit_mb=20):
-    await aiopath.makedirs(ospath.dirname(file_path), exist_ok=True)
+    await makedirs(ospath.dirname(file_path), exist_ok=True)
     downloaded = 0
     limit_bytes = limit_mb * 1024 * 1024
     try:
