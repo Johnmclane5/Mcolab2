@@ -36,3 +36,4 @@ class BotCommands:
     UserSetCommand = [f"usetting{i}", f"us{i}"]
     SelectCommand = f"sel{i}"
     RssCommand = f"rss{i}"
+    MediaInfoCommand = [f"mediainfo{i}", f"mi{i}"]

@@ -57,6 +57,13 @@ def add_handlers():
     )
     TgClient.bot.add_handler(
         MessageHandler(
+            get_mediainfo,
+            filters=command(BotCommands.MediaInfoCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
             cancel_all_buttons,
             filters=command(BotCommands.CancelAllCommand, case_sensitive=True)
             & CustomFilters.authorized,
