@@ -129,7 +129,7 @@ class TaskConfig:
         ]
         self.merge = ""
         self.mux = False
-        self.vid_transcode = False
+        self.vid_transcode = ""
 
     def get_token_path(self, dest):
         if dest.startswith("mtp:"):
@@ -917,7 +917,7 @@ class TaskConfig:
                     self.subsize = await get_path_size(f_path)
                     self.subname = ospath.basename(f_path)
                 LOGGER.info(f"Transcoding audio to AAC for: {f_path}")
-                res = await ffmpeg.transcode_audio_to_aac(f_path)
+                res = await ffmpeg.transcode_audio_to_aac(f_path, self.vid_transcode)
                 if not res:
                     LOGGER.error(f"Transcode audio failed for: {f_path}")
         finally:

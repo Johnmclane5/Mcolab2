@@ -519,9 +519,19 @@ class FFMpeg:
             )
         return False
 
-    async def transcode_audio_to_aac(self, video_file):
+    async def transcode_audio_to_aac(self, video_file, quality="320k"):
         self.clear()
         self._total_time = (await get_media_info(video_file))[0]
+
+        if isinstance(quality, bool) or not quality:
+            quality = "320k"
+        else:
+            quality = str(quality).strip().lower()
+            if quality.isdigit():
+                quality = f"{quality}k"
+            elif not quality.endswith("k"):
+                quality = "320k"
+
         try:
             result = await cmd_exec(
                 [
@@ -561,7 +571,7 @@ class FFMpeg:
                 has_audio = True
                 if codec_name != "aac":
                     non_aac_audio = True
-                    cmd_maps.extend([f"-c:a:{audio_idx}", "aac"])
+                    cmd_maps.extend([f"-c:a:{audio_idx}", "aac", f"-b:a:{audio_idx}", quality])
                 else:
                     cmd_maps.extend([f"-c:a:{audio_idx}", "copy"])
                 audio_idx += 1
