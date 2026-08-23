@@ -107,6 +107,7 @@ def arg_parser(items, arg_base):
         "-e",
         "-z",
         "-s",
+        "-as",
         "-j",
         "-d",
         "-sv",
@@ -137,6 +138,7 @@ def arg_parser(items, arg_base):
                 or part
                 in [
                     "-s",
+                    "-as",
                     "-j",
                     "-f",
                     "-fd",

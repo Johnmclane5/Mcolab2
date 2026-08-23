@@ -11,6 +11,7 @@ from ...ext_utils.bot_utils import bt_selection_buttons
 from ...ext_utils.task_manager import check_running_tasks
 from ...mirror_leech_utils.status_utils.aria2_status import Aria2Status
 from ...telegram_helper.message_utils import send_status_message, send_message
+from ....modules.aria_file_selector import AriaTorrentSelector
 
 
 async def add_aria2_download(listener, dpath, header, ratio, seed_time):
@@ -77,7 +78,7 @@ async def add_aria2_download(listener, dpath, header, ratio, seed_time):
 
     if (
         not add_to_queue
-        and (not listener.select or not Config.BASE_URL)
+        and not listener.select
         and listener.multi <= 1
         and not listener.is_rss
     ):
@@ -85,9 +86,15 @@ async def add_aria2_download(listener, dpath, header, ratio, seed_time):
     elif listener.select and "bittorrent" in download and not is_metadata(download):
         if not add_to_queue:
             await TorrentManager.aria2.forcePause(gid)
-        SBUTTONS = bt_selection_buttons(gid)
-        msg = "Your download paused. Choose files then press Done Selecting button to start downloading."
-        await send_message(listener.message, msg, SBUTTONS)
+        if getattr(listener, "aria_select", False) or not Config.BASE_URL:
+            selector = AriaTorrentSelector(listener, gid)
+            listener.aria_selector = selector
+            msg, SBUTTONS = await selector.get_buttons()
+            selector.reply_to = await send_message(listener.message, msg, SBUTTONS)
+        else:
+            SBUTTONS = bt_selection_buttons(gid)
+            msg = "Your download paused. Choose files then press Done Selecting button to start downloading."
+            await send_message(listener.message, msg, SBUTTONS)
 
     if add_to_queue:
         await event.wait()

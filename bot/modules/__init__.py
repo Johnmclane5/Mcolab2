@@ -4,6 +4,7 @@ from .chat_permission import authorize, unauthorize, add_sudo, remove_sudo
 from .clone import clone_node
 from .exec import aioexecute, execute, clear
 from .file_selector import select, confirm_selection
+from .aria_file_selector import aria_selection_handler
 from .force_start import remove_from_queue
 from .gd_count import count_node
 from .gd_delete import delete_file
@@ -46,6 +47,7 @@ __all__ = [
     "clear",
     "select",
     "confirm_selection",
+    "aria_selection_handler",
     "remove_from_queue",
     "count_node",
     "delete_file",

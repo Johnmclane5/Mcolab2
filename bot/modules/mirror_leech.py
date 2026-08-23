@@ -75,6 +75,7 @@ class Mirror(TaskListener):
             "-d": False,
             "-j": False,
             "-s": False,
+            "-as": False,
             "-b": False,
             "-e": False,
             "-z": False,
@@ -111,7 +112,8 @@ class Mirror(TaskListener):
 
         arg_parser(input_list[1:], args)
 
-        self.select = args["-s"]
+        self.select = args["-s"] or args["-as"]
+        self.aria_select = args["-as"]
         self.seed = args["-d"]
         self.name = args["-n"]
         self.up_dest = args["-up"]

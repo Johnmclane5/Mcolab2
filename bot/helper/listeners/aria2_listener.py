@@ -9,6 +9,7 @@ from ...core.config_manager import Config
 from ...core.torrent_manager import TorrentManager, is_metadata, aria2_name
 from ..ext_utils.bot_utils import bt_selection_buttons
 from ..ext_utils.files_utils import clean_unwanted
+from ...modules.aria_file_selector import AriaTorrentSelector
 from ..ext_utils.status_utils import get_task_by_gid
 from ..ext_utils.task_manager import stop_duplicate_check
 from ..mirror_leech_utils.status_utils.aria2_status import Aria2Status
@@ -77,12 +78,20 @@ async def _on_download_complete(api, data):
         LOGGER.info(f"Gid changed from {gid} to {new_gid}")
         if task := await get_task_by_gid(new_gid):
             task.listener.is_torrent = True
-            if Config.BASE_URL and task.listener.select:
+            if task.listener.select:
                 if not task.queued:
                     await api.forcePause(new_gid)
-                SBUTTONS = bt_selection_buttons(new_gid)
-                msg = "Your download paused. Choose files then press Done Selecting button to start downloading."
-                await send_message(task.listener.message, msg, SBUTTONS)
+                if getattr(task.listener, "aria_select", False) or not Config.BASE_URL:
+                    selector = AriaTorrentSelector(task.listener, new_gid)
+                    task.listener.aria_selector = selector
+                    msg, SBUTTONS = await selector.get_buttons()
+                    selector.reply_to = await send_message(
+                        task.listener.message, msg, SBUTTONS
+                    )
+                else:
+                    SBUTTONS = bt_selection_buttons(new_gid)
+                    msg = "Your download paused. Choose files then press Done Selecting button to start downloading."
+                    await send_message(task.listener.message, msg, SBUTTONS)
     elif "bittorrent" in download:
         if task := await get_task_by_gid(gid):
             task.listener.is_torrent = True
