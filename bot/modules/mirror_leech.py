@@ -108,6 +108,7 @@ class Mirror(TaskListener):
             "-mv": "",
             "-ms": False,
             "-vt": "",
+            "-da": "",
         }
 
         arg_parser(input_list[1:], args)
@@ -146,6 +147,7 @@ class Mirror(TaskListener):
         self.merge = args["-mv"]
         self.mux = args["-ms"]
         self.vid_transcode = args["-vt"]
+        self.default_audio = args["-da"]
 
         headers = args["-h"]
         if headers:
