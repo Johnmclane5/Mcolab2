@@ -202,10 +202,19 @@ class TaskListener(TaskConfig):
             self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
             self.size = await get_path_size(up_dir)
             self.clear()
-            if not self.included_extensions:
-                await remove_excluded_files(up_dir, self.excluded_extensions)
-            else:
-                await remove_non_included_files(up_dir, self.included_extensions)
+
+        if self.default_audio != "":
+            up_path = await self.proceed_default_audio(
+                up_path,
+                gid
+            )
+            if self.is_cancelled:
+                return
+            self.is_file = await aiopath.isfile(up_path)
+            self.name = up_path.replace(f"{up_dir}/", "").split("/", 1)[0]
+            self.size = await get_path_size(up_dir)
+            self.clear()
+
 
         if self.ffmpeg_cmds:
             up_path = await self.proceed_ffmpeg(

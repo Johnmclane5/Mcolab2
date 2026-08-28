@@ -649,6 +649,123 @@ class FFMpeg:
                 await remove(temp_output)
             return False
 
+    async def change_default_audio(self, video_file, audio_index=0):
+        self.clear()
+        self._total_time = (await get_media_info(video_file))[0]
+
+        try:
+            audio_idx = int(str(audio_index).strip()) if not isinstance(audio_index, bool) else 0
+        except ValueError:
+            audio_idx = 0
+
+        try:
+            result = await cmd_exec(
+                [
+                    "ffprobe",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-print_format",
+                    "json",
+                    "-show_streams",
+                    video_file,
+                ]
+            )
+        except Exception as e:
+            LOGGER.error(f"change_default_audio ffprobe error: {e} - File: {video_file}")
+            return video_file
+
+        if not result[0] or result[2] != 0:
+            LOGGER.error(f"change_default_audio ffprobe failed: {result[1]} - File: {video_file}")
+            return video_file
+
+        try:
+            streams = json_loads(result[0]).get("streams", [])
+        except Exception as e:
+            LOGGER.error(f"change_default_audio json_loads error: {e} - File: {video_file}")
+            return video_file
+
+        audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
+
+        if not audio_streams:
+            LOGGER.warning(f"No audio streams found in: {video_file}")
+            return video_file
+
+        if audio_idx < 0 or audio_idx >= len(audio_streams):
+            LOGGER.warning(
+                f"Requested default audio index {audio_idx} is out of bounds for {video_file} "
+                f"(found {len(audio_streams)} audio stream(s))"
+            )
+            return video_file
+
+        base_name, ext = ospath.splitext(video_file)
+        temp_output = f"{base_name}_daudio{ext}"
+
+        cmd = [
+            "taskset",
+            "-c",
+            f"{cores}",
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-progress",
+            "pipe:1",
+            "-i",
+            video_file,
+            "-map",
+            "0",
+            "-c",
+            "copy",
+            "-disposition:a",
+            "0",
+            f"-disposition:a:{audio_idx}",
+            "default",
+            "-threads",
+            f"{threads}",
+            temp_output,
+        ]
+
+        if self._listener.is_cancelled:
+            return False
+
+        self._listener.subproc = await create_subprocess_exec(
+            *cmd, stdout=PIPE, stderr=PIPE
+        )
+        await self._ffmpeg_progress()
+        _, stderr = await self._listener.subproc.communicate()
+        code = self._listener.subproc.returncode
+
+        if self._listener.is_cancelled:
+            if await aiopath.exists(temp_output):
+                await remove(temp_output)
+            return False
+
+        if code == 0:
+            try:
+                await remove(video_file)
+                await move(temp_output, video_file)
+            except Exception as e:
+                LOGGER.error(f"Error replacing default audio file {video_file}: {e}")
+                if await aiopath.exists(temp_output):
+                    await remove(temp_output)
+                return video_file
+            return video_file
+        elif code == -9:
+            self._listener.is_cancelled = True
+            if await aiopath.exists(temp_output):
+                await remove(temp_output)
+            return False
+        else:
+            try:
+                stderr = stderr.decode().strip()
+            except Exception:
+                stderr = "Unable to decode error!"
+            LOGGER.error(f"Error changing default audio in video {video_file}: {stderr}")
+            if await aiopath.exists(temp_output):
+                await remove(temp_output)
+            return video_file
+
     async def convert_audio(self, audio_file, ext):
         self.clear()
         self._total_time = (await get_media_info(audio_file))[0]

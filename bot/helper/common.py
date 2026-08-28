@@ -130,6 +130,7 @@ class TaskConfig:
         self.merge = ""
         self.mux = False
         self.vid_transcode = ""
+        self.default_audio = ""
 
     def get_token_path(self, dest):
         if dest.startswith("mtp:"):
@@ -920,6 +921,50 @@ class TaskConfig:
                 res = await ffmpeg.transcode_audio_to_aac(f_path, self.vid_transcode)
                 if not res:
                     LOGGER.error(f"Transcode audio failed for: {f_path}")
+        finally:
+            if checked:
+                cpu_eater_lock.release()
+
+        return dl_path
+
+    async def proceed_default_audio(self, dl_path, gid):
+        self.files_to_proceed = []
+        if self.is_file:
+            if (await get_document_type(dl_path))[0]:
+                self.files_to_proceed.append(dl_path)
+        else:
+            for dirpath, _, files in await sync_to_async(walk, dl_path, topdown=False):
+                for file_ in files:
+                    f_path = ospath.join(dirpath, file_)
+                    if (await get_document_type(f_path))[0]:
+                        self.files_to_proceed.append(f_path)
+
+        if not self.files_to_proceed:
+            return dl_path
+
+        checked = False
+        try:
+            ffmpeg = FFMpeg(self)
+            async with task_dict_lock:
+                task_dict[self.mid] = FFmpegStatus(self, ffmpeg, gid, "Change Default Audio")
+            self.progress = False
+            await cpu_eater_lock.acquire()
+            self.progress = True
+            checked = True
+
+            for f_path in self.files_to_proceed:
+                if self.is_cancelled:
+                    return False
+                self.proceed_count += 1
+                if self.is_file:
+                    self.subsize = self.size
+                else:
+                    self.subsize = await get_path_size(f_path)
+                    self.subname = ospath.basename(f_path)
+                LOGGER.info(f"Changing default audio stream to index {self.default_audio} for: {f_path}")
+                res = await ffmpeg.change_default_audio(f_path, self.default_audio)
+                if not res:
+                    LOGGER.error(f"Change default audio failed for: {f_path}")
         finally:
             if checked:
                 cpu_eater_lock.release()
