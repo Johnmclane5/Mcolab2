@@ -42,6 +42,11 @@ class BuzzheavierUploader:
         self._start_time = time.time()
         self.uploaded_files = {}  # maps filename -> link
 
+    async def cancel_task(self):
+        self.listener.is_cancelled = True
+        LOGGER.info(f"Cancelling Buzzheavier Upload: {self.listener.name}")
+        await self.listener.on_upload_error("Your upload has been stopped!")
+
     @property
     def speed(self):
         elapsed = time.time() - self._start_time
