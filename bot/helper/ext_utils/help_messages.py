@@ -281,7 +281,7 @@ YT_HELP_DICT = {
 MIRROR_HELP_DICT = {
     "main": mirror,
     "New-Name": new_name,
-    "Default-Audio": "<b>Swap Audio Stream</b>: -da\n\nInteractively select an audio track via inline buttons to swap with track 0 as default audio stream for multi-audio videos.",
+    "Default-Audio": "<b>Swap Audio Stream</b>: -da\n\nSwap audio track with track 0 by 0-based index number (e.g. -da 1 to swap track 1 with track 0). If index is omitted (e.g. -da), it defaults to track 1.",
     "Video-Transcode": "<b>Video Audio Transcode</b>: -vt\n\nTranscode non-AAC audio streams in video files to AAC while copying video/subtitles. Option to set quality e.g. -vt 128k, -vt 192k, -vt 320k (default 320k).",
     "DL-Auth": "<b>Direct link authorization</b>: -au -ap\n\n/cmd link -au username -ap password",
     "Headers": "<b>Direct link custom headers</b>: -h\n\n/cmd link -h key:value|key1:value1",
