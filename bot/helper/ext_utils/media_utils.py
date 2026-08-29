@@ -649,7 +649,7 @@ class FFMpeg:
                 await remove(temp_output)
             return False
 
-    async def change_default_audio(self, video_file, audio_index=0):
+    async def swap_audio(self, video_file, audio_index=0):
         self.clear()
         self._total_time = (await get_media_info(video_file))[0]
 
@@ -672,17 +672,17 @@ class FFMpeg:
                 ]
             )
         except Exception as e:
-            LOGGER.error(f"change_default_audio ffprobe error: {e} - File: {video_file}")
+            LOGGER.error(f"swap_audio ffprobe error: {e} - File: {video_file}")
             return video_file
 
         if not result[0] or result[2] != 0:
-            LOGGER.error(f"change_default_audio ffprobe failed: {result[1]} - File: {video_file}")
+            LOGGER.error(f"swap_audio ffprobe failed: {result[1]} - File: {video_file}")
             return video_file
 
         try:
             streams = json_loads(result[0]).get("streams", [])
         except Exception as e:
-            LOGGER.error(f"change_default_audio json_loads error: {e} - File: {video_file}")
+            LOGGER.error(f"swap_audio json_loads error: {e} - File: {video_file}")
             return video_file
 
         audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
@@ -693,13 +693,28 @@ class FFMpeg:
 
         if audio_idx < 0 or audio_idx >= len(audio_streams):
             LOGGER.warning(
-                f"Requested default audio index {audio_idx} is out of bounds for {video_file} "
+                f"Requested swap audio index {audio_idx} is out of bounds for {video_file} "
                 f"(found {len(audio_streams)} audio stream(s))"
             )
             return video_file
 
+        if audio_idx == 0:
+            LOGGER.info(f"Audio index {audio_idx} is already track 0 in: {video_file}")
+            return video_file
+
         base_name, ext = ospath.splitext(video_file)
-        temp_output = f"{base_name}_daudio{ext}"
+        temp_output = f"{base_name}_swapped{ext}"
+
+        map_cmds = ["-map", "0:v?"]
+        for i in range(len(audio_streams)):
+            if i == 0:
+                map_cmds.extend(["-map", f"0:a:{audio_idx}"])
+            elif i == audio_idx:
+                map_cmds.extend(["-map", "0:a:0"])
+            else:
+                map_cmds.extend(["-map", f"0:a:{i}"])
+
+        map_cmds.extend(["-map", "0:s?", "-map", "0:t?"])
 
         cmd = [
             "taskset",
@@ -713,13 +728,12 @@ class FFMpeg:
             "pipe:1",
             "-i",
             video_file,
-            "-map",
-            "0",
+        ] + map_cmds + [
             "-c",
             "copy",
             "-disposition:a",
             "0",
-            f"-disposition:a:{audio_idx}",
+            "-disposition:a:0",
             "default",
             "-threads",
             f"{threads}",
@@ -746,7 +760,7 @@ class FFMpeg:
                 await remove(video_file)
                 await move(temp_output, video_file)
             except Exception as e:
-                LOGGER.error(f"Error replacing default audio file {video_file}: {e}")
+                LOGGER.error(f"Error replacing swapped audio file {video_file}: {e}")
                 if await aiopath.exists(temp_output):
                     await remove(temp_output)
                 return video_file
@@ -761,10 +775,13 @@ class FFMpeg:
                 stderr = stderr.decode().strip()
             except Exception:
                 stderr = "Unable to decode error!"
-            LOGGER.error(f"Error changing default audio in video {video_file}: {stderr}")
+            LOGGER.error(f"Error swapping audio in video {video_file}: {stderr}")
             if await aiopath.exists(temp_output):
                 await remove(temp_output)
             return video_file
+
+    async def change_default_audio(self, video_file, audio_index=0):
+        return await self.swap_audio(video_file, audio_index)
 
     async def convert_audio(self, audio_file, ext):
         self.clear()
