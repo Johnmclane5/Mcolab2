@@ -19,6 +19,7 @@ from ..helper.ext_utils.links_utils import (
     is_gdrive_id,
 )
 from ..helper.listeners.task_listener import TaskListener
+from .audio_selector import AudioSelection, probe_audio_streams
 from ..helper.mirror_leech_utils.download_utils.aria2_download import (
     add_aria2_download,
 )
@@ -311,6 +312,18 @@ class Mirror(TaskListener):
             await send_message(self.message, e)
             await self.remove_from_same_dir()
             return
+
+        if self.default_audio:
+            audio_streams = await probe_audio_streams(self, self.link, reply_to, session)
+            if audio_streams and len(audio_streams) > 1:
+                sel_audio = await AudioSelection(self).get_audio_choice(audio_streams)
+                if sel_audio is not None:
+                    self.default_audio = sel_audio
+                else:
+                    self.default_audio = ""
+                if self.is_cancelled:
+                    await self.remove_from_same_dir()
+                    return
 
         if (
             not self.is_jd
