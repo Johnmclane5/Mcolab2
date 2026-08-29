@@ -649,14 +649,17 @@ class FFMpeg:
                 await remove(temp_output)
             return False
 
-    async def swap_audio(self, video_file, audio_index=0):
+    async def swap_audio(self, video_file, audio_index=1):
         self.clear()
         self._total_time = (await get_media_info(video_file))[0]
 
-        try:
-            audio_idx = int(str(audio_index).strip()) if not isinstance(audio_index, bool) else 0
-        except ValueError:
-            audio_idx = 0
+        if isinstance(audio_index, bool):
+            audio_idx = 1
+        else:
+            try:
+                audio_idx = int(str(audio_index).strip())
+            except ValueError:
+                audio_idx = 1
 
         try:
             result = await cmd_exec(
