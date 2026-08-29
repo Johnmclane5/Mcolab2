@@ -946,7 +946,7 @@ class TaskConfig:
         try:
             ffmpeg = FFMpeg(self)
             async with task_dict_lock:
-                task_dict[self.mid] = FFmpegStatus(self, ffmpeg, gid, "Change Default Audio")
+                task_dict[self.mid] = FFmpegStatus(self, ffmpeg, gid, "Swap Audio")
             self.progress = False
             await cpu_eater_lock.acquire()
             self.progress = True
@@ -961,10 +961,10 @@ class TaskConfig:
                 else:
                     self.subsize = await get_path_size(f_path)
                     self.subname = ospath.basename(f_path)
-                LOGGER.info(f"Changing default audio stream to index {self.default_audio} for: {f_path}")
-                res = await ffmpeg.change_default_audio(f_path, self.default_audio)
+                LOGGER.info(f"Swapping audio stream index {self.default_audio} with 0 for: {f_path}")
+                res = await ffmpeg.swap_audio(f_path, self.default_audio)
                 if not res:
-                    LOGGER.error(f"Change default audio failed for: {f_path}")
+                    LOGGER.error(f"Swap audio failed for: {f_path}")
         finally:
             if checked:
                 cpu_eater_lock.release()
